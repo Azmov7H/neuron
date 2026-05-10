@@ -29,7 +29,7 @@ const navSections = [
       { icon: Home, label: "Home", href: "/" },
       { icon: Compass, label: "Explore", href: "/explore" },
       { icon: Zap, label: "Spark", href: "/spark" },
-      { icon: LayoutGrid, label: "Matrix", href: "/evolution" },
+      { icon: LayoutGrid, label: "Matrix", href: "/matrix" },
       { icon: MonitorPlay, label: "Simulations", href: "/simulations" },
       { icon: Route, label: "Neural Paths", href: "/neural-paths" },
     ],
