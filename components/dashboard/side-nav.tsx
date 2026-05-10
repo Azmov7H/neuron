@@ -75,11 +75,11 @@ export function SideNav() {
             </p>
             <div className="space-y-0.5">
               {section.items.map((item) => {
-                const isActive = pathname === item.href;
+                const isActive = pathname === `/dashboard/${item.href}`;
                 return (
                   <Link
                     key={item.label}
-                    href={item.href}
+                    href={`/dashboard/${item.href}`}
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                       isActive
                         ? "bg-white/5 text-foreground shadow-[0_0_15px_rgba(59,130,246,0.1)]"
