@@ -27,9 +27,9 @@ const navSections = [
     title: "CORE",
     items: [
       { icon: Home, label: "Home", href: "/" },
-      { icon: Compass, label: "Explore", href: "/neural-paths" },
+      { icon: Compass, label: "Explore", href: "/ev" },
       { icon: Zap, label: "Spark", href: "/spark" },
-      { icon: LayoutGrid, label: "Matrix", href: "/matrix" },
+      { icon: LayoutGrid, label: "Matrix", href: "/evolution" },
       { icon: MonitorPlay, label: "Simulations", href: "/simulations" },
       { icon: Route, label: "Neural Paths", href: "/neural-paths" },
     ],
@@ -79,7 +79,7 @@ export function SideNav() {
                 return (
                   <Link
                     key={item.label}
-                    href={`/dashboard/${item.href}`}
+                    href={`/dashboard${item.href}`}
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                       isActive
                         ? "bg-white/5 text-foreground shadow-[0_0_15px_rgba(59,130,246,0.1)]"
