@@ -27,7 +27,7 @@ const navSections = [
     title: "CORE",
     items: [
       { icon: Home, label: "Home", href: "/" },
-      { icon: Compass, label: "Explore", href: "/ev" },
+      { icon: Compass, label: "Explore", href: "/explore" },
       { icon: Zap, label: "Spark", href: "/spark" },
       { icon: LayoutGrid, label: "Matrix", href: "/evolution" },
       { icon: MonitorPlay, label: "Simulations", href: "/simulations" },
