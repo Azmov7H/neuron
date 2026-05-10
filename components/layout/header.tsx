@@ -31,7 +31,7 @@ export function Navbar() {
         
         <div className="flex items-center gap-3">
           <Link
-            href="#"
+            href="/auth/register"
             className="hidden sm:inline-flex text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
             Sign In
