@@ -27,7 +27,7 @@ const navSections = [
     title: "CORE",
     items: [
       { icon: Home, label: "Home", href: "/" },
-      { icon: Compass, label: "Explore", href: "/explore" },
+      { icon: Compass, label: "Explore", href: "/neural-paths" },
       { icon: Zap, label: "Spark", href: "/spark" },
       { icon: LayoutGrid, label: "Matrix", href: "/matrix" },
       { icon: MonitorPlay, label: "Simulations", href: "/simulations" },
@@ -39,7 +39,7 @@ const navSections = [
     items: [
       { icon: TrendingUp, label: "Evolution", href: "/evolution" },
       { icon: Trophy, label: "Achievements", href: "/achievements" },
-      { icon: BookOpen, label: "Library", href: "/library" },
+      { icon: BookOpen, label: "Library", href: "/neural-paths" },
     ],
   },
   {
@@ -75,7 +75,7 @@ export function SideNav() {
             </p>
             <div className="space-y-0.5">
               {section.items.map((item) => {
-                const isActive = pathname === `/dashboard/${item.href}`;
+                const isActive = pathname === `/dashboard${item.href}`;
                 return (
                   <Link
                     key={item.label}
