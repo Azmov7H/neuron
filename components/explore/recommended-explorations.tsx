@@ -1,13 +1,18 @@
-// components/explore/recommended-explorations.tsx
 import { Sparkles, ArrowUpRight } from "lucide-react";
 
-const recommendations = [
-  { title: "The Nature of Computation", desc: "Bridge between physics and computer science.", type: "Concept" },
-  { title: "Neural Darwinism", desc: "How neuronal groups evolve through selection.", type: "Theory" },
-  { title: "Quantum Biology", desc: "Quantum effects in biological processes.", type: "Domain" },
-];
+interface Recommendation {
+  title: string;
+  desc: string;
+  type: string;
+}
 
-export function RecommendedExplorations() {
+export function RecommendedExplorations({ 
+  recommendations, 
+  onRecommendationClick 
+}: { 
+  recommendations: Recommendation[];
+  onRecommendationClick: (name: string) => void;
+}) {
   return (
     <section className="animate-fade-up delay-300">
       <div className="flex items-center gap-3 mb-6">
@@ -17,7 +22,11 @@ export function RecommendedExplorations() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {recommendations.map((rec) => (
-          <div key={rec.title} className="glass rounded-xl p-6 glow-border border-secondary/10 cursor-pointer group relative overflow-hidden">
+          <div 
+            key={rec.title} 
+            onClick={() => onRecommendationClick(rec.title)}
+            className="glass rounded-xl p-6 glow-border border-secondary/10 cursor-pointer group relative overflow-hidden"
+          >
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-secondary/5 to-transparent animate-shimmer" />
             
             <div className="relative z-10">

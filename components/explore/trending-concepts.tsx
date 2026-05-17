@@ -1,12 +1,12 @@
-// components/explore/trending-concepts.tsx
 import { TrendingUp } from "lucide-react";
 
-const concepts = [
-  "Entropy", "Neural Networks", "Dark Matter", "Emergence", "Quantum Tunneling", 
-  "Blockchains", "Epigenetics", "String Theory", "Teleology", "Superposition"
-];
-
-export function TrendingConcepts() {
+export function TrendingConcepts({ 
+  concepts, 
+  onConceptClick 
+}: { 
+  concepts: string[];
+  onConceptClick: (name: string) => void;
+}) {
   return (
     <section className="animate-fade-up delay-200">
       <div className="flex items-center gap-3 mb-6">
@@ -18,6 +18,7 @@ export function TrendingConcepts() {
         {concepts.map((concept) => (
           <button 
             key={concept}
+            onClick={() => onConceptClick(concept)}
             className="px-4 py-2 rounded-full border border-white/10 bg-white/5 text-sm font-medium text-foreground hover:bg-primary/10 hover:border-primary/30 hover:text-primary hover:shadow-[0_0_15px_rgba(59,130,246,0.1)] transition-all"
           >
             {concept}
