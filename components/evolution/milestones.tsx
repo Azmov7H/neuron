@@ -1,13 +1,37 @@
-// components/evolution/milestones.tsx
 import { Clock, Flame, Atom } from "lucide-react";
 
-const milestones = [
-  { icon: Clock, title: "10 Hours in Physics", desc: "Deep domain engagement", achieved: true, color: "border-blue-500/30 bg-blue-500/5" },
-  { icon: Flame, title: "30-Day Continuity", desc: "Unbroken neural streak", achieved: false, color: "border-amber-500/30 bg-amber-500/5" },
-  { icon: Atom, title: "Quantum Foundations", desc: "Path mastery achieved", achieved: true, color: "border-purple-500/30 bg-purple-500/5" },
-];
+export function Milestones({ streak, stats }: { streak: number; stats?: any }) {
+  const currentStreak = streak || 0;
+  const timeSpentMin = stats?.totalTimeSpent || 0;
+  const completedPaths = stats?.totalPathsCompleted || 0;
 
-export function Milestones() {
+  // Convert minutes to hours and format
+  const hoursSpent = (timeSpentMin / 60).toFixed(1);
+
+  const milestones = [
+    { 
+      icon: Clock, 
+      title: `${hoursSpent} Hours Learning`, 
+      desc: "Deep platform engagement", 
+      achieved: timeSpentMin >= 60, // achieved after 1 hour of learning
+      color: "border-blue-500/30 bg-blue-500/5" 
+    },
+    { 
+      icon: Flame, 
+      title: "30-Day Continuity", 
+      desc: `${currentStreak}/30 streak days`, 
+      achieved: currentStreak >= 30, 
+      color: "border-amber-500/30 bg-amber-500/5" 
+    },
+    { 
+      icon: Atom, 
+      title: "Neural Path Pioneer", 
+      desc: `${completedPaths} path(s) fully completed`, 
+      achieved: completedPaths > 0, 
+      color: "border-purple-500/30 bg-purple-500/5" 
+    },
+  ];
+
   return (
     <div className="animate-fade-up delay-300">
       <h3 className="text-lg font-semibold text-foreground mb-6">Milestones</h3>

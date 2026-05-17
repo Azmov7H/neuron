@@ -1,15 +1,23 @@
-// components/evolution/cognitive-insights.tsx
-import { Sparkles, Eye, Moon, Brain } from "lucide-react"; // تم استبدال Night بـ Moon
+import { Sparkles, Eye, Moon, Brain } from "lucide-react";
 
-const insights = [
-  { icon: Eye, text: "You learn fastest through visual simulations.", color: "text-blue-400" },
-  { icon: Moon, text: "You explore abstract concepts more deeply at night.", color: "text-purple-400" }, // تم استبدال Night بـ Moon
-  { icon: Brain, text: "Your strongest intellectual growth is currently in AI systems.", color: "text-emerald-400" },
-];
+export function CognitiveInsights({ userDomains }: { userDomains?: any[] }) {
+  // Find user's highest XP domain
+  let topDomain = "General Knowledge";
+  if (userDomains && userDomains.length > 0) {
+    const sorted = [...userDomains].sort((a, b) => b.xp - a.xp);
+    if (sorted[0]?.xp > 0) {
+      topDomain = sorted[0].domain.charAt(0).toUpperCase() + sorted[0].domain.slice(1);
+    }
+  }
 
-export function CognitiveInsights() {
+  const insights = [
+    { icon: Eye, text: "You learn fastest through cognitive neural path visual simulations.", color: "text-blue-400" },
+    { icon: Moon, text: "You explore abstract concepts more deeply during late active hours.", color: "text-purple-400" },
+    { icon: Brain, text: `Your strongest intellectual growth is currently in ${topDomain}.`, color: "text-emerald-400" },
+  ];
+
   return (
-    <div className="glass rounded-2xl p-8 glow-border border-secondary/20 h-full flex flex-col relative overflow-hidden">
+    <div className="glass rounded-2xl p-8 glow-border border-secondary/20 h-full flex flex-col relative overflow-hidden animate-fade-up delay-100">
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-secondary/5 to-transparent animate-shimmer" />
       
       <div className="relative z-10">

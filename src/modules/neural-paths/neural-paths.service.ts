@@ -6,6 +6,7 @@
 import { NeuralPath } from '@/database/models/neural-path';
 import { UserProgress } from '@/database/models/user-progress';
 import { User } from '@/database/models/user';
+import { EvolutionService } from '@/modules/evolution/evolution.service';
 import { AppError } from '@/types';
 import mongoose from 'mongoose';
 
@@ -337,27 +338,23 @@ export class NeuralPathsService {
       await progress.save();
 
       const user: any = await User.findById(userId);
+      let newRank = user?.rank;
       if (user) {
-        user.totalXP += chapterXPReward;
-        const now = new Date();
-        const lastActive = new Date(user.lastActiveDate);
-        const diffHours = (now.getTime() - lastActive.getTime()) / (1000 * 60 * 60);
-        
-        if (diffHours > 24 && diffHours < 48) {
-          user.streak += 1;
-        } else if (diffHours >= 48) {
-          user.streak = 1;
-        }
-        
-        user.lastActiveDate = now;
-        user.rank = typeof user.calculateRank === 'function' ? user.calculateRank() : user.rank;
-        await user.save();
+        // Use EvolutionService to handle XP, rank, and logs
+        const evolutionResult = await EvolutionService.addXP(
+          userId, 
+          chapterXPReward, 
+          path.domain, 
+          `Completed chapter: ${chapter.title}`, 
+          { pathId: path._id, chapterId: chapter.id }
+        );
+        newRank = evolutionResult.user.rank;
       }
 
       return { 
         message: 'Chapter completed successfully', 
         xpEarned: chapterXPReward,
-        newRank: user?.rank,
+        newRank: newRank,
         overallCompletion: progress.overallCompletion,
         nextChapterId: progress.currentChapterId
       };

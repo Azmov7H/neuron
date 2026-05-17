@@ -1,17 +1,23 @@
-// components/evolution/hero-evolution.tsx
 import { TrendingUp, Sparkles, Brain, Target } from "lucide-react";
 
-const xpTypes = [
-  { label: "Knowledge", value: 4500, color: "bg-blue-500", icon: Brain },
-  { label: "Curiosity", value: 2100, color: "bg-purple-500", icon: Sparkles },
-  { label: "Insight", value: 1200, color: "bg-amber-500", icon: TrendingUp },
-  { label: "Mastery", value: 4650, color: "bg-emerald-500", icon: Target },
-];
+export function HeroEvolution({ user, nextRankXP }: { user: any; nextRankXP: number }) {
+  if (!user) return null;
 
-export function HeroEvolution() {
-  const totalXP = xpTypes.reduce((acc, curr) => acc + curr.value, 0);
-  const maxXP = 20000;
-  const progress = (totalXP / maxXP) * 100;
+  const totalXP = user.totalXP || 0;
+  
+  // Calculate breakdown for display visually (distribute total XP)
+  const xpTypes = [
+    { label: "Knowledge", value: Math.floor(totalXP * 0.4), color: "bg-blue-500", icon: Brain },
+    { label: "Curiosity", value: Math.floor(totalXP * 0.2), color: "bg-purple-500", icon: Sparkles },
+    { label: "Insight", value: Math.floor(totalXP * 0.15), color: "bg-amber-500", icon: TrendingUp },
+    { label: "Mastery", value: Math.floor(totalXP * 0.25), color: "bg-emerald-500", icon: Target },
+  ];
+
+  const maxXP = nextRankXP || 1000;
+  const progress = Math.min((totalXP / maxXP) * 100, 100);
+
+  // Get first letter of the rank for the circle badge
+  const rankLetter = user.rank ? user.rank.charAt(0) : "O";
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-up">
@@ -29,7 +35,7 @@ export function HeroEvolution() {
               <circle 
                 cx="50" cy="50" r="45" fill="none" stroke="url(#rankGradient)" strokeWidth="4" strokeLinecap="round"
                 strokeDasharray={`${2 * Math.PI * 45}`} 
-                strokeDashoffset={`${2 * Math.PI * 45 * (1 - 0.74)}`} 
+                strokeDashoffset={`${2 * Math.PI * 45 * (1 - (progress / 100))}`} 
                 className="transition-all duration-1000"
               />
               <defs>
@@ -39,11 +45,11 @@ export function HeroEvolution() {
                 </linearGradient>
               </defs>
             </svg>
-            <span className="text-4xl font-bold text-primary">S</span>
+            <span className="text-4xl font-bold text-primary">{rankLetter}</span>
           </div>
 
-          <h2 className="text-2xl font-bold text-foreground tracking-tight mb-2">SYNTHESIST</h2>
-          <p className="text-sm text-muted-foreground">74% toward Architect</p>
+          <h2 className="text-2xl font-bold text-foreground tracking-tight mb-2 uppercase">{user.rank || 'Observer'}</h2>
+          <p className="text-sm text-muted-foreground">{Math.floor(progress)}% toward Next Rank</p>
         </div>
       </div>
 
@@ -74,7 +80,7 @@ export function HeroEvolution() {
               </div>
               <p className="text-xl font-bold text-foreground">{xp.value.toLocaleString()}</p>
               <div className="mt-2 h-1 w-full bg-white/5 rounded-full overflow-hidden">
-                <div className={`h-full ${xp.color} rounded-full opacity-60`} style={{ width: `${(xp.value / 5000) * 100}%` }} />
+                <div className={`h-full ${xp.color} rounded-full opacity-60`} style={{ width: `${(xp.value / Math.max(totalXP, 1)) * 100}%` }} />
               </div>
             </div>
           ))}
