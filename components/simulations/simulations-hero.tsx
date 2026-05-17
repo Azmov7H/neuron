@@ -64,51 +64,53 @@ export function SimulationsHero() {
         <div className="max-w-3xl">
           <div className="flex items-center gap-3 mb-6">
             <span className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest bg-primary/10 text-primary border border-primary/20 rounded-full flex items-center gap-1">
-              <Zap size={10} /> Featured Lab
+              <Zap size={10} /> Unified Core
             </span>
             <span className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full flex items-center gap-1">
-              <Activity size={10} /> Live Simulation
+              <Activity size={10} /> Deterministic Loops
             </span>
             <span className="px-3 py-1 text-[10px] font-semibold uppercase tracking-widest bg-white/5 text-muted-foreground border border-white/10 rounded-full">
-              AI Domain
+              6 Scientific Domains
             </span>
           </div>
 
           <h1 className="text-4xl lg:text-6xl font-bold tracking-tighter text-foreground mb-4">
-            Neural Network <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Visualizer</span>
+            Scientific Telemetry <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Laboratories</span>
           </h1>
 
-          <p className="text-lg text-muted-foreground mb-8 max-w-lg leading-relaxed">
-            Watch intelligence emerge in real-time. Adjust layers, tweak learning rates, and see how a network learns to recognize patterns through interactive 3D visualization.
+          <p className="text-lg text-muted-foreground mb-8 max-w-xl leading-relaxed">
+            Explore Einstein's relativity, epidemic SIR transmissions, white blood cell phagocytosis sweeps, quantized quantum energy fields, and Schwarzschild redshift event horizons at 60 FPS, with direct Spark AI streaming assessments.
           </p>
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
             <div className="flex items-center gap-6 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Brain size={16} className="text-primary" />
-                <span>Real-time Training</span>
+                <span>60 FPS Render Engines</span>
               </div>
               <div className="flex items-center gap-2">
                 <Activity size={16} className="text-secondary" />
-                <span>Interactive Controls</span>
+                <span>Spark Stream Telemetry</span>
               </div>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
             <Link
-              href="/dashboard/simulations/neural-network-visualizer"
+              href="/dashboard/simulations/physics"
               className="group flex items-center gap-2 bg-primary text-primary-foreground px-8 py-3 rounded-lg font-semibold shadow-[0_0_20px_rgba(59,130,246,0.4)] hover:shadow-[0_0_30px_rgba(59,130,246,0.6)] transition-all active:scale-95 hover:scale-105"
             >
               <Play size={18} fill="currentColor" />
-              Enter Lab
+              Enter Laboratories
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
             </Link>
-            <button className="group flex items-center gap-2 bg-white/5 border border-white/10 hover:border-primary/30 text-foreground px-6 py-3 rounded-lg font-medium transition-all hover:bg-white/10 hover:scale-105">
+            <Link 
+              href="/dashboard/simulations/physics"
+              className="group flex items-center gap-2 bg-white/5 border border-white/10 hover:border-primary/30 text-foreground px-6 py-3 rounded-lg font-medium transition-all hover:bg-white/10 hover:scale-105"
+            >
               <Sparkles size={16} className="text-secondary group-hover:text-primary transition-colors" />
-              Ask Spark
-              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-primary/5 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000 rounded-lg" />
-            </button>
+              Telemetry HUD
+            </Link>
           </div>
         </div>
       </div>

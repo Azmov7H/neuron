@@ -10,7 +10,7 @@ export default function SimulationPage({ params }: PageProps) {
   const { slug } = use(params);
 
   return (
-    <div className="min-h-screen h-screen lg:h-[calc(100vh-4rem)] lg:-m-8 relative overflow-hidden bg-background">
+    <div className="w-full h-[calc(100vh-8.5rem)] p-4 relative overflow-hidden bg-background">
       <SimulationRunner slug={slug} />
     </div>
   );
