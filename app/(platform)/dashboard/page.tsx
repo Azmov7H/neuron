@@ -8,6 +8,7 @@ import { ExploreDomains } from "@/components/dashboard/explore-domains";
 import { EvolutionProgress } from "@/components/dashboard/evolution-progress";
 import { RecentDiscoveries } from "@/components/dashboard/recent-discoveries";
 import { SimulationsPreview } from "@/components/dashboard/simulations-preview";
+import { DashboardSecret } from "@/components/dashboard/dashboard-secret";
 
 export default function DashboardPage() {
   return (
@@ -20,6 +21,7 @@ export default function DashboardPage() {
         
         {/* 1. Neural Welcome */}
         <NeuralWelcome />
+        <DashboardSecret />
 
         {/* 2 & 3. Continue Learning + Spark */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

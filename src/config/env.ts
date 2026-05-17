@@ -43,6 +43,7 @@ export const config = {
   server: {
     nodeEnv: getEnv('NODE_ENV', 'development'),
     port: parseInt(getEnv('PORT', '3000')),
+    dashboardSecret: getEnv('DASHBOARD_SECRET', 'hidden-by-default'),
     isDevelopment: getEnv('NODE_ENV', 'development') === 'development',
     isProduction: getEnv('NODE_ENV', 'development') === 'production',
   },
