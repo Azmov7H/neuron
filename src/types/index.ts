@@ -157,6 +157,24 @@ export interface ISparkSession {
 }
 
 // ============================================
+// KNOWLEDGE BASE TYPES
+// ============================================
+
+export interface IKnowledge {
+  _id?: string;
+  title: string;
+  domain: string;
+  explanation: string;
+  tags: string[];
+  relatedConcepts: string[];
+  relatedSimulations?: string[];
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  examples: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// ============================================
 // DISCOVERY TYPES
 // ============================================
 

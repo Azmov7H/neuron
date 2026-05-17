@@ -1,13 +1,13 @@
 import { NextRequest } from 'next/server';
-import { connectDB } from '@/database/connection';
 import { getAuthContext, withErrorHandling, requireAuth } from '@/middleware/auth';
 import { ApiResponseHandler } from '@/lib/utils/response';
 import { ActionHandler, ActionType } from '@/core/actionHandler';
+import { connectDB } from '@/database/connection';
 import { z } from 'zod';
 
-const CompleteChapterSchema = z.object({
-  pathId: z.string().min(1),
-  chapterId: z.string().min(1),
+const ActionPayloadSchema = z.object({
+  type: z.nativeEnum(ActionType),
+  metadata: z.any(),
 });
 
 async function handler(request: NextRequest) {
@@ -23,19 +23,14 @@ async function handler(request: NextRequest) {
     return ApiResponseHandler.badRequest('Invalid JSON body');
   }
 
-  const result = CompleteChapterSchema.safeParse(body);
+  const result = ActionPayloadSchema.safeParse(body);
   if (!result.success) {
-    return ApiResponseHandler.badRequest('Invalid payload');
+    return ApiResponseHandler.badRequest('Invalid payload structure: ' + result.error.message);
   }
 
-  const { pathId, chapterId } = result.data;
+  const response = await ActionHandler.handleUserAction(auth.userId, result.data);
 
-  const response = await ActionHandler.handleUserAction(auth.userId, {
-    type: ActionType.COMPLETE_CHAPTER,
-    metadata: { pathId, chapterId }
-  });
-
-  return ApiResponseHandler.success(response, 'Chapter completed successfully');
+  return ApiResponseHandler.success(response, 'Action processed successfully');
 }
 
 export const POST = withErrorHandling(requireAuth(handler));
