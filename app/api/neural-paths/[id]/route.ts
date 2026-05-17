@@ -10,7 +10,10 @@ async function handler(request: NextRequest, { params }: any) {
 
   await connectDB();
 
-  const result = await NeuralPathsService.getPathBySlug(params.id, auth.userId);
+  const resolvedParams = await params;
+  const id = resolvedParams.id;
+
+  const result = await NeuralPathsService.getPathBySlug(id, auth.userId);
 
   return ApiResponseHandler.success(result, 'Path retrieved successfully');
 }

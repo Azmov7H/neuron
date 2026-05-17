@@ -64,10 +64,13 @@ export interface Chapter {
   id: string;
   title: string;
   description: string;
+  explanation: string;
   objectives: string[];
   duration: number; // minutes
   resources: string[];
   concepts: string[];
+  examples?: string[];
+  quiz?: any;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   order: number;
 }

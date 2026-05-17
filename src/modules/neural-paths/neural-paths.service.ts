@@ -283,17 +283,14 @@ export class NeuralPathsService {
    * Complete a chapter, update progress, and reward XP
    */
   static async completeChapter(userId: string, pathId: string, chapterId: string) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-      const path = await NeuralPath.findById(pathId).session(session);
+      const path = await NeuralPath.findById(pathId);
       if (!path) throw new AppError(404, 'Path not found');
 
       const chapterIndex = path.chapters.findIndex((c: any) => c.id === chapterId);
       if (chapterIndex === -1) throw new AppError(404, 'Chapter not found');
 
-      let progress: any = await UserProgress.findOne({ userId, pathId: path._id }).session(session);
+      let progress: any = await UserProgress.findOne({ userId, pathId: path._id });
       
       const chapter = path.chapters[chapterIndex];
       const totalDuration = path.chapters.reduce((sum: number, ch: any) => sum + ch.duration, 0);
@@ -316,7 +313,6 @@ export class NeuralPathsService {
         : new Map(Object.entries(progress.chapterProgress || {}));
 
       if (chapterProgressMap.get(chapterId) === 100) {
-        await session.abortTransaction();
         return { message: 'Chapter already completed', progress };
       }
 
@@ -338,9 +334,9 @@ export class NeuralPathsService {
         progress.completedAt = new Date();
       }
 
-      await progress.save({ session });
+      await progress.save();
 
-      const user: any = await User.findById(userId).session(session);
+      const user: any = await User.findById(userId);
       if (user) {
         user.totalXP += chapterXPReward;
         const now = new Date();
@@ -355,10 +351,9 @@ export class NeuralPathsService {
         
         user.lastActiveDate = now;
         user.rank = typeof user.calculateRank === 'function' ? user.calculateRank() : user.rank;
-        await user.save({ session });
+        await user.save();
       }
 
-      await session.commitTransaction();
       return { 
         message: 'Chapter completed successfully', 
         xpEarned: chapterXPReward,
@@ -367,10 +362,7 @@ export class NeuralPathsService {
         nextChapterId: progress.currentChapterId
       };
     } catch (error) {
-      await session.abortTransaction();
       throw error;
-    } finally {
-      session.endSession();
     }
   }
 
