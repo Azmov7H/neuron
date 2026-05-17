@@ -1,8 +1,8 @@
-// components/dashboard/neural-welcome.tsx
 "use client";
 
 import { useEffect, useState } from "react";
 import { Flame, Zap, Clock, TrendingUp } from "lucide-react";
+import type { DashboardSummary } from "@/app/api/dashboard/summary/route";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -11,7 +11,13 @@ function getGreeting() {
   return "Good Evening";
 }
 
-export function NeuralWelcome() {
+export function NeuralWelcome({ 
+  user,
+  activePath 
+}: { 
+  user: DashboardSummary["user"];
+  activePath: DashboardSummary["activePath"];
+}) {
   const [greeting, setGreeting] = useState("");
 
   useEffect(() => {
@@ -19,21 +25,27 @@ export function NeuralWelcome() {
   }, []);
 
   const stats = [
-    { icon: Zap, label: "XP", value: "12,450", color: "text-blue-400" },
-    { icon: TrendingUp, label: "Rank", value: "Neural Adept", color: "text-purple-400" },
-    { icon: Flame, label: "Streak", value: "12 Days", color: "text-amber-400" },
-    { icon: Clock, label: "This Week", value: "8.5h", color: "text-emerald-400" },
+    { icon: Zap, label: "XP", value: user.totalXP.toLocaleString(), color: "text-blue-400" },
+    { icon: TrendingUp, label: "Rank", value: user.rank, color: "text-purple-400" },
+    { icon: Flame, label: "Streak", value: `${user.streak} Days`, color: "text-amber-400" },
+    { icon: Clock, label: "This Week", value: "Active", color: "text-emerald-400" },
   ];
 
   return (
     <section className="animate-fade-up">
       <div className="mb-8">
         <h1 className="text-4xl font-bold tracking-tight mb-2">
-          {greeting}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent">Ali</span>
+          {greeting}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent capitalize">{user.username}</span>
         </h1>
-        <p className="text-muted-foreground text-lg">
-          You are <span className="text-foreground font-semibold">74%</span> through "The Architecture of Intelligence"
-        </p>
+        {activePath ? (
+          <p className="text-muted-foreground text-lg">
+            You are <span className="text-foreground font-semibold">{activePath.overallCompletion}%</span> through "{activePath.title}"
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-lg">
+            Ready to start a new neural path?
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
