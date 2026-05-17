@@ -1,4 +1,3 @@
-// components/dashboard/side-nav.tsx
 "use client";
 
 import { 
@@ -19,7 +18,7 @@ import {
   LogOut
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Logo from "../logo";
 
 const navSections = [
@@ -60,6 +59,24 @@ const navSections = [
 
 export function SideNav() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    try {
+      // Clear localStorage
+      localStorage.removeItem("neuronAccessToken");
+      localStorage.removeItem("neuronRefreshToken");
+      localStorage.removeItem("neuronUser");
+
+      // Clear the httpOnly session cookie
+      await fetch("/api/auth/session", { method: "DELETE" });
+
+      // Redirect to login
+      router.push("/auth/login");
+    } catch (err) {
+      console.error("Failed to logout:", err);
+    }
+  };
 
   return (
     <aside className="hidden lg:flex w-72 flex-col h-screen border-r border-white/5 bg-card/30 backdrop-blur-xl">
@@ -75,11 +92,11 @@ export function SideNav() {
             </p>
             <div className="space-y-0.5">
               {section.items.map((item) => {
-                const isActive = pathname === `/dashboard${item.href}`;
+                const isActive = pathname === `/dashboard${item.href}` || (item.href === "/" && pathname === "/dashboard");
                 return (
                   <Link
                     key={item.label}
-                    href={`/dashboard${item.href}`}
+                    href={`/dashboard${item.href === "/" ? "" : item.href}`}
                     className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                       isActive
                         ? "bg-white/5 text-foreground shadow-[0_0_15px_rgba(59,130,246,0.1)]"
@@ -106,7 +123,10 @@ export function SideNav() {
           </button>
         </div>
 
-        <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground/50 hover:text-red-400 hover:bg-red-400/5 transition-all duration-200">
+        <button 
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground/50 hover:text-red-400 hover:bg-red-400/5 transition-all duration-200"
+        >
           <LogOut size={18} /> Log Out
         </button>
       </div>

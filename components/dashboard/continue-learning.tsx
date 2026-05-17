@@ -1,7 +1,20 @@
-// components/dashboard/continue-learning.tsx
 import { Play } from "lucide-react";
+import type { DashboardSummary } from "@/app/api/dashboard/summary/route";
 
-export function ContinueLearning() {
+export function ContinueLearning({ activePath }: { activePath: DashboardSummary["activePath"] }) {
+  if (!activePath) {
+    return (
+      <div className="relative h-full min-h-[280px] rounded-2xl overflow-hidden group glow-border border-primary/20 flex flex-col items-center justify-center bg-card/30">
+        <div className="text-center p-8">
+          <p className="text-muted-foreground mb-4">No active learning path found.</p>
+          <button className="bg-primary text-primary-foreground px-6 py-2 rounded-lg font-semibold shadow-[0_0_20px_rgba(59,130,246,0.4)] transition-all">
+            Explore Paths
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-full min-h-[280px] rounded-2xl overflow-hidden group cursor-pointer glow-border border-primary/20">
       {/* Cinematic Background */}
@@ -12,8 +25,8 @@ export function ContinueLearning() {
       <div className="relative z-10 h-full flex flex-col justify-end p-8">
         <div className="mb-6 max-w-md">
           <p className="text-xs font-semibold uppercase tracking-widest text-primary/80 mb-2">Continue Exploring</p>
-          <h2 className="text-3xl font-bold tracking-tight mb-1">Quantum Entanglement</h2>
-          <p className="text-muted-foreground">Chapter 4 — Non-Local Reality</p>
+          <h2 className="text-3xl font-bold tracking-tight mb-1">{activePath.title}</h2>
+          <p className="text-muted-foreground">{activePath.currentChapterTitle}</p>
         </div>
 
         <div className="flex items-center gap-6">
@@ -23,9 +36,12 @@ export function ContinueLearning() {
           
           <div className="flex-1 max-w-xs">
             <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
-              <div className="h-full w-[74%] bg-gradient-to-r from-primary to-accent rounded-full" />
+              <div 
+                className="h-full bg-gradient-to-r from-primary to-accent rounded-full" 
+                style={{ width: `${activePath.overallCompletion}%` }}
+              />
             </div>
-            <p className="text-xs text-muted-foreground mt-1 text-right">74% Complete</p>
+            <p className="text-xs text-muted-foreground mt-1 text-right">{activePath.overallCompletion}% Complete</p>
           </div>
         </div>
       </div>

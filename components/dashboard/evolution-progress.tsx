@@ -1,11 +1,11 @@
-// components/dashboard/evolution-progress.tsx
 import { TrendingUp, Target, Zap } from "lucide-react";
+import type { DashboardSummary } from "@/app/api/dashboard/summary/route";
 
-export function EvolutionProgress() {
+export function EvolutionProgress({ weeklyStats }: { weeklyStats: DashboardSummary["weeklyStats"] }) {
   const stats = [
-    { label: "Cognitive Velocity", value: "+14%", icon: Zap, color: "text-blue-400" },
-    { label: "Weekly XP", value: "2,450", icon: TrendingUp, color: "text-emerald-400" },
-    { label: "Concepts Mastered", value: "142", icon: Target, color: "text-purple-400" },
+    { label: "Cognitive Velocity", value: weeklyStats.cognitiveVelocityLabel, icon: Zap, color: "text-blue-400" },
+    { label: "Weekly XP", value: weeklyStats.weeklyXP.toLocaleString(), icon: TrendingUp, color: "text-emerald-400" },
+    { label: "Concepts Mastered", value: weeklyStats.conceptsMastered.toString(), icon: Target, color: "text-purple-400" },
   ];
 
   return (

@@ -1,9 +1,25 @@
-// components/dashboard/top-bar.tsx
 "use client";
 
 import { Search, Bell, Settings, Command } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export function TopBar() {
+  const [initials, setInitials] = useState("U");
+
+  useEffect(() => {
+    try {
+      const userStr = localStorage.getItem("neuronUser");
+      if (userStr) {
+        const user = JSON.parse(userStr);
+        if (user.username) {
+          setInitials(user.username.charAt(0).toUpperCase());
+        }
+      }
+    } catch {
+      // Ignore errors parsing localstorage
+    }
+  }, []);
+
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between px-6 lg:px-8 bg-card/50 backdrop-blur-xl border-b border-white/5">
       <div className="flex items-center gap-4">
@@ -29,7 +45,7 @@ export function TopBar() {
           <Settings size={18} />
         </button>
         <div className="ml-2 h-8 w-8 rounded-full bg-gradient-to-tr from-primary to-accent overflow-hidden ring-2 ring-white/10 cursor-pointer hover:ring-primary/50 transition-all">
-          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-background">A</div>
+          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-background">{initials}</div>
         </div>
       </div>
     </header>
