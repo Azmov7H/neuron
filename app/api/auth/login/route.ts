@@ -1,34 +1,37 @@
 /**
  * POST /api/auth/login
- * Login user and get tokens
+ * Authenticate a user and return a token pair
  */
 
 import { NextRequest } from 'next/server';
+import { ZodError } from 'zod';
+
 import { connectDB } from '@/database/connection';
 import { AuthService } from '@/modules/auth/auth.service';
-import { ApiResponseHandler } from '@/lib/utils/response';
+import { ApiResponseHandler, zodValidationError } from '@/lib/utils/response';
 import { LoginSchema } from '@/validations/schemas';
 import { withErrorHandling, withRateLimit } from '@/middleware/auth';
 
 async function handler(request: NextRequest) {
+  await connectDB();
+
+  const body: unknown = await request.json();
+
+  let validatedData;
   try {
-    await connectDB();
-
-    // Parse and validate
-    const body = await request.json();
-    const validatedData = LoginSchema.parse(body);
-
-    // Login user
-    const result = await AuthService.login(validatedData);
-
-    return ApiResponseHandler.success(result, 'Login successful');
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return ApiResponseHandler.badRequest('Invalid input');
+    validatedData = LoginSchema.parse(body);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return zodValidationError(error);
     }
-
     throw error;
   }
+
+  const result = await AuthService.login(validatedData);
+
+  return ApiResponseHandler.success(result, 'Login successful');
 }
 
-export const POST = withErrorHandling(withRateLimit(handler, 10, 3600000)); // 10 requests per hour
+export const POST = withErrorHandling(
+  withRateLimit(handler, 10, 3_600_000) // 10 login attempts per hour per IP (production only)
+);

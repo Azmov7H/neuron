@@ -252,7 +252,10 @@ export interface AuthResponse extends AuthTokens {
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
-  error?: string;
+  error?: {
+    message: string;
+    fields?: Record<string, string[]>;
+  };
   message?: string;
   statusCode: number;
 }

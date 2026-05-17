@@ -1,6 +1,6 @@
 /**
  * Auth Service
- * Authentication business logic and user registration/login
+ * Authentication business logic — register, login, token refresh
  */
 
 import { User } from '@/database/models/user';
@@ -13,26 +13,31 @@ export class AuthService {
    * Register new user
    */
   static async register(input: RegisterInput) {
-    // Check if user exists
+    const normalizedEmail = input.email.trim().toLowerCase();
+    const normalizedUsername = input.username.trim().toLowerCase();
+
+    // Check for duplicates
     const existingUser = await User.findOne({
-      $or: [{ email: input.email }, { username: input.username }],
+      $or: [{ email: normalizedEmail }, { username: normalizedUsername }],
     });
 
     if (existingUser) {
-      const field = existingUser.email === input.email ? 'email' : 'username';
+      const field = existingUser.email === normalizedEmail ? 'email' : 'username';
       throw new AppError(409, `This ${field} is already registered`, 'USER_EXISTS');
     }
 
-    // Create new user
+    // Build user document — password hashed via pre-save hook
     const user = new User({
-      username: input.username,
-      email: input.email,
+      username: normalizedUsername,
+      email: normalizedEmail,
       password: input.password,
+      // Store learning path selection if provided
+      ...(input.preferredDomain ? { preferredDomains: [input.preferredDomain] } : {}),
     });
 
     await user.save();
 
-    // Generate tokens
+    // Generate token pair
     const tokens = generateTokens({
       userId: user._id.toString(),
       email: user.email,
@@ -46,28 +51,30 @@ export class AuthService {
   }
 
   /**
-   * Login user
+   * Login user — accepts email or username
    */
   static async login(input: LoginInput) {
-    // Find user by email
-    const user = await User.findOne({ email: input.email }).select('+password');
+    const normalizedIdentifier = input.email.trim().toLowerCase();
+
+    const user = await User.findOne({
+      $or: [{ email: normalizedIdentifier }, { username: normalizedIdentifier }],
+    }).select('+password');
 
     if (!user) {
+      // Use vague message to prevent user enumeration
       throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
-    // Verify password
     const isPasswordValid = await user.comparePassword(input.password);
 
     if (!isPasswordValid) {
       throw new AppError(401, 'Invalid credentials', 'INVALID_CREDENTIALS');
     }
 
-    // Update last active date
+    // Update last active timestamp
     user.lastActiveDate = new Date();
     await user.save();
 
-    // Generate tokens
     const tokens = generateTokens({
       userId: user._id.toString(),
       email: user.email,
@@ -81,34 +88,30 @@ export class AuthService {
   }
 
   /**
-   * Refresh access token
+   * Refresh access token using a valid refresh token
    */
   static async refreshToken(refreshToken: string) {
     const decoded = verifyRefreshToken(refreshToken);
 
     if (!decoded) {
-      throw new AppError(401, 'Invalid refresh token', 'INVALID_TOKEN');
+      throw new AppError(401, 'Invalid or expired refresh token', 'INVALID_TOKEN');
     }
 
-    // Verify user still exists
     const user = await User.findById(decoded.userId);
 
     if (!user) {
       throw new AppError(401, 'User not found', 'USER_NOT_FOUND');
     }
 
-    // Generate new tokens
-    const tokens = generateTokens({
+    return generateTokens({
       userId: user._id.toString(),
       email: user.email,
       username: user.username,
     });
-
-    return tokens;
   }
 
   /**
-   * Get user context
+   * Get user context by ID
    */
   static async getUserContext(userId: string) {
     const user = await User.findById(userId);

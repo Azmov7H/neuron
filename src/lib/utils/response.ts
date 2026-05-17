@@ -1,10 +1,15 @@
 /**
  * Response Utilities
- * Standardized API response formatting
+ * Standardized API response formatting — all responses follow:
+ * { success, data?, error?: { message, fields? }, message?, statusCode }
  */
 
 import { NextResponse } from 'next/server';
 import { ApiResponse, PaginatedResponse, AppError } from '@/types';
+
+// ─────────────────────────────────────────────
+// Core Handler
+// ─────────────────────────────────────────────
 
 export class ApiResponseHandler {
   static success<T>(
@@ -13,12 +18,7 @@ export class ApiResponseHandler {
     statusCode = 200
   ): NextResponse<ApiResponse<T>> {
     return NextResponse.json(
-      {
-        success: true,
-        data,
-        message,
-        statusCode,
-      },
+      { success: true, data, message, statusCode },
       { status: statusCode }
     );
   }
@@ -58,8 +58,8 @@ export class ApiResponseHandler {
       return NextResponse.json(
         {
           success: false,
-          error: error.message,
-          message: error.code || 'An error occurred',
+          error: { message: error.message },
+          message: error.code ?? 'An error occurred',
           statusCode: error.statusCode,
         },
         { status: error.statusCode }
@@ -70,7 +70,7 @@ export class ApiResponseHandler {
     return NextResponse.json(
       {
         success: false,
-        error: message,
+        error: { message },
         message: 'An error occurred',
         statusCode,
       },
@@ -103,20 +103,48 @@ export class ApiResponseHandler {
   }
 }
 
+// ─────────────────────────────────────────────
+// Validation Error — field-level errors
+// ─────────────────────────────────────────────
+
 /**
- * Validation error response
+ * Returns a 422 response with per-field validation errors.
+ * Shape: { success: false, error: { message, fields }, statusCode: 422 }
  */
 export function validationError(
-  errors: Record<string, string[]>
+  fields: Record<string, string[]>
 ): NextResponse<ApiResponse> {
   return NextResponse.json(
     {
       success: false,
-      error: 'Validation failed',
+      error: {
+        message: 'Validation failed',
+        fields,
+      },
       message: 'Invalid input',
       statusCode: 422,
-      data: errors,
     },
     { status: 422 }
   );
+}
+
+// ─────────────────────────────────────────────
+// Zod Error Mapper
+// ─────────────────────────────────────────────
+
+import type { ZodError } from 'zod';
+
+/**
+ * Converts a ZodError into a { field: string[] } map and returns a 422 response.
+ */
+export function zodValidationError(error: ZodError): NextResponse<ApiResponse> {
+  const fields: Record<string, string[]> = {};
+
+  for (const issue of error.issues) {
+    const path = issue.path.join('.') || '_root';
+    if (!fields[path]) fields[path] = [];
+    fields[path].push(issue.message);
+  }
+
+  return validationError(fields);
 }

@@ -94,8 +94,6 @@ const userSchema = new Schema<IUserDocument>(
   }
 );
 
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
 userSchema.index({ totalXP: -1 });
 userSchema.index({ createdAt: -1 });
 

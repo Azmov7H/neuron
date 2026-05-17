@@ -1,34 +1,35 @@
 /**
  * POST /api/auth/refresh
- * Refresh access token using refresh token
+ * Rotate access token using a valid refresh token
  */
 
 import { NextRequest } from 'next/server';
+import { ZodError } from 'zod';
+
 import { connectDB } from '@/database/connection';
 import { AuthService } from '@/modules/auth/auth.service';
-import { ApiResponseHandler } from '@/lib/utils/response';
+import { ApiResponseHandler, zodValidationError } from '@/lib/utils/response';
 import { RefreshTokenSchema } from '@/validations/schemas';
 import { withErrorHandling } from '@/middleware/auth';
 
 async function handler(request: NextRequest) {
+  await connectDB();
+
+  const body: unknown = await request.json();
+
+  let refreshToken: string;
   try {
-    await connectDB();
-
-    // Parse and validate
-    const body = await request.json();
-    const { refreshToken } = RefreshTokenSchema.parse(body);
-
-    // Refresh tokens
-    const tokens = await AuthService.refreshToken(refreshToken);
-
-    return ApiResponseHandler.success(tokens, 'Token refreshed');
-  } catch (error: any) {
-    if (error.name === 'ZodError') {
-      return ApiResponseHandler.badRequest('Invalid input');
+    ({ refreshToken } = RefreshTokenSchema.parse(body));
+  } catch (error) {
+    if (error instanceof ZodError) {
+      return zodValidationError(error);
     }
-
     throw error;
   }
+
+  const tokens = await AuthService.refreshToken(refreshToken);
+
+  return ApiResponseHandler.success(tokens, 'Token refreshed successfully');
 }
 
 export const POST = withErrorHandling(handler);
