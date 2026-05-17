@@ -5,9 +5,98 @@
 
 import { NeuralPath } from '@/database/models/neural-path';
 import { UserProgress } from '@/database/models/user-progress';
+import { User } from '@/database/models/user';
 import { AppError } from '@/types';
+import mongoose from 'mongoose';
 
 export class NeuralPathsService {
+  /**
+   * Ensure database has basic neural paths for demonstration
+   */
+  static async seedPathsIfEmpty() {
+    const count = await NeuralPath.countDocuments();
+    if (count > 0) return;
+
+    const dummyPaths = [
+      {
+        slug: "quantum-entanglement",
+        title: "Quantum Entanglement & Spacetime",
+        description: "Explore the fabric of reality through quantum mechanics and spacetime.",
+        domain: "physics",
+        category: "Quantum Mechanics",
+        difficulty: "intermediate",
+        estimatedTime: 480, // 8 Hours
+        xpReward: 3200,
+        chapters: [
+          {
+            id: "ch-1",
+            title: "The Observer Effect",
+            description: "Understanding measurement in quantum mechanics.",
+            objectives: ["Define superposition", "Explain wave function collapse"],
+            duration: 60,
+            resources: [],
+            concepts: ["Superposition", "Wave Function"],
+            difficulty: "intermediate",
+            order: 1,
+          },
+          {
+            id: "ch-2",
+            title: "Spooky Action at a Distance",
+            description: "Deep dive into Bell's theorem and entanglement.",
+            objectives: ["Understand non-locality"],
+            duration: 120,
+            resources: [],
+            concepts: ["Entanglement", "Bell's Theorem"],
+            difficulty: "advanced",
+            order: 2,
+          }
+        ],
+        prerequisites: [],
+        difficulty_multiplier: 1.5,
+        isActive: true,
+      },
+      {
+        slug: "architecture-of-intelligence",
+        title: "The Architecture of Intelligence",
+        description: "From biological neural networks to artificial transformers.",
+        domain: "technology",
+        category: "Artificial Intelligence",
+        difficulty: "advanced",
+        estimatedTime: 720, // 12 Hours
+        xpReward: 4500,
+        chapters: [
+          {
+            id: "ch-1",
+            title: "Biological Foundations",
+            description: "How the human brain processes information.",
+            objectives: ["Understand synapses", "Define neuroplasticity"],
+            duration: 90,
+            resources: [],
+            concepts: ["Synapses", "Neuroplasticity"],
+            difficulty: "intermediate",
+            order: 1,
+          },
+          {
+            id: "ch-2",
+            title: "Transformers and Attention",
+            description: "The mechanism behind modern LLMs.",
+            objectives: ["Explain self-attention"],
+            duration: 150,
+            resources: [],
+            concepts: ["Self-Attention", "LLMs"],
+            difficulty: "advanced",
+            order: 2,
+          }
+        ],
+        prerequisites: [],
+        difficulty_multiplier: 2.0,
+        isActive: true,
+      }
+    ];
+
+    await NeuralPath.insertMany(dummyPaths);
+  }
+
   /**
    * Get all paths with filters
    */
@@ -17,8 +106,10 @@ export class NeuralPathsService {
     page?: number;
     limit?: number;
     sort?: 'popular' | 'newest' | 'difficulty';
+    userId?: string;
   }) {
-    const { domain, difficulty, page = 1, limit = 10, sort = 'popular' } = filters;
+    await this.seedPathsIfEmpty();
+    const { domain, difficulty, page = 1, limit = 10, sort = 'popular', userId } = filters;
 
     const query: any = { isActive: true };
     if (domain) query.domain = domain;
@@ -44,8 +135,19 @@ export class NeuralPathsService {
       NeuralPath.countDocuments(query),
     ]);
 
+    let progressMap = new Map();
+    if (userId) {
+      const progresses = await UserProgress.find({ userId }).lean();
+      progressMap = new Map(progresses.map((p: any) => [p.pathId.toString(), p.overallCompletion]));
+    }
+
+    const enrichedPaths = paths.map((p: any) => ({
+      ...p,
+      progress: progressMap.get(p._id.toString()) || 0
+    }));
+
     return {
-      items: paths,
+      items: enrichedPaths,
       total,
       page,
       limit,
@@ -54,16 +156,51 @@ export class NeuralPathsService {
   }
 
   /**
-   * Get path by slug
+   * Get path by slug and include progress
    */
-  static async getPathBySlug(slug: string) {
-    const path = await NeuralPath.findOne({ slug, isActive: true });
+  static async getPathBySlug(slug: string, userId?: string) {
+    const path = await NeuralPath.findOne({ slug, isActive: true }).lean();
 
     if (!path) {
       throw new AppError(404, 'Path not found', 'PATH_NOT_FOUND');
     }
 
-    return path;
+    let overallCompletion = 0;
+    let currentChapterId = path.chapters[0]?.id;
+    let chapterProgressMap = new Map();
+
+    if (userId) {
+      const progress = await UserProgress.findOne({ userId, pathId: path._id }).lean() as any;
+      if (progress) {
+        overallCompletion = progress.overallCompletion;
+        currentChapterId = progress.currentChapterId;
+        chapterProgressMap = progress.chapterProgress instanceof Map 
+          ? progress.chapterProgress 
+          : new Map(Object.entries(progress.chapterProgress || {}));
+      }
+    }
+
+    const currentChIndex = path.chapters.findIndex((c: any) => c.id === currentChapterId);
+    
+    const enrichedChapters = path.chapters.map((ch: any) => {
+      const chProgress = chapterProgressMap.get(ch.id) || 0;
+      const isCompleted = chProgress >= 100;
+      const isUnlocked = ch.order <= (path.chapters[currentChIndex]?.order || 1) || isCompleted;
+
+      return {
+        ...ch,
+        progress: chProgress,
+        isCompleted,
+        isUnlocked,
+        isCurrent: ch.id === currentChapterId
+      };
+    });
+
+    return {
+      ...path,
+      overallCompletion,
+      chapters: enrichedChapters
+    };
   }
 
   /**
@@ -140,6 +277,101 @@ export class NeuralPathsService {
     await progress.save();
 
     return progress;
+  }
+
+  /**
+   * Complete a chapter, update progress, and reward XP
+   */
+  static async completeChapter(userId: string, pathId: string, chapterId: string) {
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const path = await NeuralPath.findById(pathId).session(session);
+      if (!path) throw new AppError(404, 'Path not found');
+
+      const chapterIndex = path.chapters.findIndex((c: any) => c.id === chapterId);
+      if (chapterIndex === -1) throw new AppError(404, 'Chapter not found');
+
+      let progress: any = await UserProgress.findOne({ userId, pathId: path._id }).session(session);
+      
+      const chapter = path.chapters[chapterIndex];
+      const totalDuration = path.chapters.reduce((sum: number, ch: any) => sum + ch.duration, 0);
+      const chapterXPReward = Math.floor((chapter.duration / totalDuration) * path.xpReward);
+
+      if (!progress) {
+        progress = new UserProgress({
+          userId,
+          pathId: path._id,
+          currentChapterId: chapterId,
+          chapterProgress: new Map(),
+          overallCompletion: 0,
+          xpEarned: 0,
+          timeSpent: 0
+        });
+      }
+
+      const chapterProgressMap = progress.chapterProgress instanceof Map 
+        ? progress.chapterProgress 
+        : new Map(Object.entries(progress.chapterProgress || {}));
+
+      if (chapterProgressMap.get(chapterId) === 100) {
+        await session.abortTransaction();
+        return { message: 'Chapter already completed', progress };
+      }
+
+      chapterProgressMap.set(chapterId, 100);
+      progress.chapterProgress = chapterProgressMap;
+      progress.xpEarned += chapterXPReward;
+
+      let completedChapters = 0;
+      path.chapters.forEach((ch: any) => {
+        if (chapterProgressMap.get(ch.id) === 100) completedChapters++;
+      });
+      progress.overallCompletion = Math.floor((completedChapters / path.chapters.length) * 100);
+
+      if (chapterIndex + 1 < path.chapters.length) {
+        progress.currentChapterId = path.chapters[chapterIndex + 1].id;
+      }
+
+      if (progress.overallCompletion === 100) {
+        progress.completedAt = new Date();
+      }
+
+      await progress.save({ session });
+
+      const user: any = await User.findById(userId).session(session);
+      if (user) {
+        user.totalXP += chapterXPReward;
+        const now = new Date();
+        const lastActive = new Date(user.lastActiveDate);
+        const diffHours = (now.getTime() - lastActive.getTime()) / (1000 * 60 * 60);
+        
+        if (diffHours > 24 && diffHours < 48) {
+          user.streak += 1;
+        } else if (diffHours >= 48) {
+          user.streak = 1;
+        }
+        
+        user.lastActiveDate = now;
+        user.rank = typeof user.calculateRank === 'function' ? user.calculateRank() : user.rank;
+        await user.save({ session });
+      }
+
+      await session.commitTransaction();
+      return { 
+        message: 'Chapter completed successfully', 
+        xpEarned: chapterXPReward,
+        newRank: user?.rank,
+        overallCompletion: progress.overallCompletion,
+        nextChapterId: progress.currentChapterId
+      };
+    } catch (error) {
+      await session.abortTransaction();
+      throw error;
+    } finally {
+      session.endSession();
+    }
   }
 
   /**
