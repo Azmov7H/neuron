@@ -1,13 +1,15 @@
 import { NextRequest } from 'next/server';
-import { connectDB } from '@/database/connection';
 import { getAuthContext, withErrorHandling, requireAuth } from '@/middleware/auth';
 import { ApiResponseHandler } from '@/lib/utils/response';
-import { ActionHandler, ActionType } from '@/core/actionHandler';
+import { EvolutionService } from '@/modules/evolution/evolution.service';
+import { connectDB } from '@/database/connection';
 import { z } from 'zod';
 
-const CompleteChapterSchema = z.object({
-  pathId: z.string().min(1),
-  chapterId: z.string().min(1),
+const AddXpSchema = z.object({
+  amount: z.number().positive(),
+  domain: z.string().min(1),
+  reason: z.string().min(1),
+  metadata: z.any().optional(),
 });
 
 async function handler(request: NextRequest) {
@@ -23,19 +25,18 @@ async function handler(request: NextRequest) {
     return ApiResponseHandler.badRequest('Invalid JSON body');
   }
 
-  const result = CompleteChapterSchema.safeParse(body);
+  const result = AddXpSchema.safeParse(body);
   if (!result.success) {
     return ApiResponseHandler.badRequest('Invalid payload');
   }
 
-  const { pathId, chapterId } = result.data;
+  const { amount, domain, reason, metadata } = result.data;
 
-  const response = await ActionHandler.handleUserAction(auth.userId, {
-    type: ActionType.COMPLETE_CHAPTER,
-    metadata: { pathId, chapterId }
-  });
+  const response = await EvolutionService.addXP(auth.userId, amount, domain, reason, metadata);
+  // Auto-update streak when gaining XP
+  await EvolutionService.updateStreak(auth.userId);
 
-  return ApiResponseHandler.success(response, 'Chapter completed successfully');
+  return ApiResponseHandler.success(response, 'XP added successfully');
 }
 
 export const POST = withErrorHandling(requireAuth(handler));

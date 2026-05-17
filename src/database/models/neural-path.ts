@@ -11,10 +11,13 @@ const ChapterSchema = new Schema<Chapter>(
     id: { type: String, required: true },
     title: { type: String, required: true },
     description: String,
+    explanation: { type: String, required: true },
     objectives: [String],
     duration: { type: Number, required: true }, // minutes
     resources: [String],
     concepts: [String],
+    examples: [String],
+    quiz: { type: Schema.Types.Mixed },
     difficulty: {
       type: String,
       enum: ['beginner', 'intermediate', 'advanced'],

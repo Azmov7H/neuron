@@ -64,10 +64,13 @@ export interface Chapter {
   id: string;
   title: string;
   description: string;
+  explanation: string;
   objectives: string[];
   duration: number; // minutes
   resources: string[];
   concepts: string[];
+  examples?: string[];
+  quiz?: any;
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   order: number;
 }
@@ -151,6 +154,24 @@ export interface ISparkSession {
   createdAt: Date;
   updatedAt: Date;
   expiresAt: Date;
+}
+
+// ============================================
+// KNOWLEDGE BASE TYPES
+// ============================================
+
+export interface IKnowledge {
+  _id?: string;
+  title: string;
+  domain: string;
+  explanation: string;
+  tags: string[];
+  relatedConcepts: string[];
+  relatedSimulations?: string[];
+  difficulty: 'beginner' | 'intermediate' | 'advanced';
+  examples: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 // ============================================

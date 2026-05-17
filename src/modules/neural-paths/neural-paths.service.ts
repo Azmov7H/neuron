@@ -6,6 +6,7 @@
 import { NeuralPath } from '@/database/models/neural-path';
 import { UserProgress } from '@/database/models/user-progress';
 import { User } from '@/database/models/user';
+import { EvolutionService } from '@/modules/evolution/evolution.service';
 import { AppError } from '@/types';
 import mongoose from 'mongoose';
 
@@ -283,17 +284,14 @@ export class NeuralPathsService {
    * Complete a chapter, update progress, and reward XP
    */
   static async completeChapter(userId: string, pathId: string, chapterId: string) {
-    const session = await mongoose.startSession();
-    session.startTransaction();
-
     try {
-      const path = await NeuralPath.findById(pathId).session(session);
+      const path = await NeuralPath.findById(pathId);
       if (!path) throw new AppError(404, 'Path not found');
 
       const chapterIndex = path.chapters.findIndex((c: any) => c.id === chapterId);
       if (chapterIndex === -1) throw new AppError(404, 'Chapter not found');
 
-      let progress: any = await UserProgress.findOne({ userId, pathId: path._id }).session(session);
+      let progress: any = await UserProgress.findOne({ userId, pathId: path._id });
       
       const chapter = path.chapters[chapterIndex];
       const totalDuration = path.chapters.reduce((sum: number, ch: any) => sum + ch.duration, 0);
@@ -316,7 +314,6 @@ export class NeuralPathsService {
         : new Map(Object.entries(progress.chapterProgress || {}));
 
       if (chapterProgressMap.get(chapterId) === 100) {
-        await session.abortTransaction();
         return { message: 'Chapter already completed', progress };
       }
 
@@ -338,39 +335,31 @@ export class NeuralPathsService {
         progress.completedAt = new Date();
       }
 
-      await progress.save({ session });
+      await progress.save();
 
-      const user: any = await User.findById(userId).session(session);
+      const user: any = await User.findById(userId);
+      let newRank = user?.rank;
       if (user) {
-        user.totalXP += chapterXPReward;
-        const now = new Date();
-        const lastActive = new Date(user.lastActiveDate);
-        const diffHours = (now.getTime() - lastActive.getTime()) / (1000 * 60 * 60);
-        
-        if (diffHours > 24 && diffHours < 48) {
-          user.streak += 1;
-        } else if (diffHours >= 48) {
-          user.streak = 1;
-        }
-        
-        user.lastActiveDate = now;
-        user.rank = typeof user.calculateRank === 'function' ? user.calculateRank() : user.rank;
-        await user.save({ session });
+        // Use EvolutionService to handle XP, rank, and logs
+        const evolutionResult = await EvolutionService.addXP(
+          userId, 
+          chapterXPReward, 
+          path.domain, 
+          `Completed chapter: ${chapter.title}`, 
+          { pathId: path._id, chapterId: chapter.id }
+        );
+        newRank = evolutionResult.user.rank;
       }
 
-      await session.commitTransaction();
       return { 
         message: 'Chapter completed successfully', 
         xpEarned: chapterXPReward,
-        newRank: user?.rank,
+        newRank: newRank,
         overallCompletion: progress.overallCompletion,
         nextChapterId: progress.currentChapterId
       };
     } catch (error) {
-      await session.abortTransaction();
       throw error;
-    } finally {
-      session.endSession();
     }
   }
 

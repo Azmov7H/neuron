@@ -71,7 +71,7 @@ const userSchema = new Schema<IUserDocument>(
     avatar: String,
 
     // Progression
-    rank: { type: String, default: 'Novice' },
+    rank: { type: String, default: 'Observer' },
     totalXP: { type: Number, default: 0, index: true },
     streak: { type: Number, default: 0 },
     lastActiveDate: { type: Date, default: Date.now },
@@ -115,12 +115,11 @@ userSchema.methods.comparePassword = async function (
 // Method: calculate user rank based on XP
 userSchema.methods.calculateRank = function (): string {
   const xp = this.totalXP;
-  if (xp < 1000) return 'Novice';
+  if (xp < 1000) return 'Observer';
   if (xp < 5000) return 'Explorer';
-  if (xp < 15000) return 'Scholar';
-  if (xp < 35000) return 'Sage';
-  if (xp < 70000) return 'Architect';
-  return 'Synthesist';
+  if (xp < 15000) return 'Analyst';
+  if (xp < 35000) return 'Architect';
+  return 'Neuro-Architect';
 };
 
 // Exclude sensitive fields on toJSON
