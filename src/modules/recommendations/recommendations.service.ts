@@ -27,11 +27,13 @@ export class RecommendationsService {
 
     // Get related paths based on discoveries
     const domainIds = discoveries.map((d) => d.domain);
-    const recommendedPaths = await NeuralPath.find({
+    const query: any = {
       domain: { $in: domainIds },
       isActive: true,
       _id: { $nin: user.learningHistory },
-    })
+    };
+
+    const recommendedPaths = await NeuralPath.find(query)
       .sort({ completionRate: -1 })
       .limit(limit)
       .lean();

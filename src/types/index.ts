@@ -1,3 +1,5 @@
+import type { Types } from 'mongoose';
+
 /**
  * Type Definitions
  * Centralized type system for the Neuron platform
@@ -45,7 +47,7 @@ export interface IUser {
   preferredDomains: string[];
 
   // Behavioral
-  learningHistory: string[]; // Path IDs
+  learningHistory: Array<Types.ObjectId | string>; // Path IDs
   discoveredConcepts: string[];
   savedResources: string[];
 
@@ -103,10 +105,10 @@ export interface INeuralPath {
 
 export interface IUserProgress {
   _id: string;
-  userId: string;
-  pathId: string;
+  userId: Types.ObjectId | string;
+  pathId: Types.ObjectId | string;
   currentChapterId: string;
-  chapterProgress: Record<string, number>; // chapterId -> completion %
+  chapterProgress: Map<string, number>; // chapterId -> completion %
   overallCompletion: number; // 0-100
   xpEarned: number;
   timeSpent: number; // seconds
@@ -132,11 +134,11 @@ export interface SparkMessage {
 
 export interface ISparkSession {
   _id: string;
-  userId: string;
+  userId: Types.ObjectId | string;
   domain: string;
   messages: SparkMessage[];
   context: {
-    currentPathId?: string;
+    currentPathId?: Types.ObjectId | string;
     currentChapterId?: string;
     userLevel: number;
     recentConcepts: string[];
@@ -157,16 +159,16 @@ export interface ISparkSession {
 
 export interface IDiscovery {
   _id: string;
-  userId: string;
+  userId: Types.ObjectId | string;
   conceptId: string;
   concept: string;
   domain: string;
   relatedConcepts: string[];
   importance: number; // 0-100
   context: {
-    sourcePathId?: string;
+    sourcePathId?: Types.ObjectId | string;
     sourceChapterId?: string;
-    fromSparkSession?: string;
+    fromSparkSession?: Types.ObjectId | string;
   };
   userInterest: number; // 0-100 based on engagement
   discoveredAt: Date;
@@ -177,7 +179,7 @@ export interface IDiscovery {
 // ============================================
 
 export interface RecommendationProfile {
-  userId: string;
+  userId: Types.ObjectId | string;
   interests: string[];
   preferredLearningStyle: 'visual' | 'auditory' | 'kinesthetic' | 'reading-writing';
   strongestDomains: string[];
@@ -197,7 +199,7 @@ export interface RecommendationProfile {
 
 export interface IRecommendation {
   _id: string;
-  userId: string;
+  userId: Types.ObjectId | string;
   type: 'path' | 'concept' | 'domain';
   targetId: string;
   targetTitle: string;

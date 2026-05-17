@@ -57,8 +57,16 @@ export const UpdateProfileSchema = z.object({
 export const NeuralPathQuerySchema = z.object({
   domain: z.string().optional(),
   difficulty: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
-  page: z.string().transform(Number).optional().default('1'),
-  limit: z.string().transform(Number).optional().default('10'),
+  page: z
+    .preprocess((value) => {
+      if (typeof value === 'string') return Number(value);
+      return value;
+    }, z.number().int().positive().default(1)),
+  limit: z
+    .preprocess((value) => {
+      if (typeof value === 'string') return Number(value);
+      return value;
+    }, z.number().int().positive().default(10)),
   sort: z.enum(['popular', 'newest', 'difficulty']).optional().default('popular'),
 });
 
@@ -68,7 +76,7 @@ export const NeuralPathQuerySchema = z.object({
 
 export const UpdateProgressSchema = z.object({
   currentChapterId: z.string().min(1),
-  chapterProgressMap: z.record(z.number().min(0).max(100)).optional(),
+  chapterProgressMap: z.record(z.string(), z.number().min(0).max(100)).optional(),
   overallCompletion: z.number().min(0).max(100).optional(),
   xpEarned: z.number().min(0).optional(),
   timeSpent: z.number().min(0).optional(),

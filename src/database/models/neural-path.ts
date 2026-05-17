@@ -91,14 +91,13 @@ const neuralPathSchema = new Schema<INeuralPath & Document>(
   },
   {
     timestamps: true,
-    indexes: [
-      { domain: 1, isActive: 1 },
-      { difficulty: 1, isActive: 1 },
-      { completionRate: -1 },
-      { createdAt: -1 },
-    ],
   }
 );
+
+neuralPathSchema.index({ domain: 1, isActive: 1 });
+neuralPathSchema.index({ difficulty: 1, isActive: 1 });
+neuralPathSchema.index({ completionRate: -1 });
+neuralPathSchema.index({ createdAt: -1 });
 
 // Virtual: total content time
 neuralPathSchema.virtual('totalContentTime').get(function () {

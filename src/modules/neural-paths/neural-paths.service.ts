@@ -152,10 +152,12 @@ export class NeuralPathsService {
       return [];
     }
 
-    const prerequisites = await NeuralPath.find({
+    const query: any = {
       _id: { $in: path.prerequisites },
       isActive: true,
-    }).lean();
+    };
+
+    const prerequisites = await NeuralPath.find(query).lean();
 
     return prerequisites;
   }

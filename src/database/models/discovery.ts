@@ -38,9 +38,15 @@ const discoverySchema = new Schema<IDiscovery & Document>(
       index: true,
     },
     context: {
-      sourcePathId: Schema.Types.ObjectId,
+      sourcePathId: {
+        type: Schema.Types.ObjectId,
+        ref: 'NeuralPath',
+      },
       sourceChapterId: String,
-      fromSparkSession: Schema.Types.ObjectId,
+      fromSparkSession: {
+        type: Schema.Types.ObjectId,
+        ref: 'SparkSession',
+      },
     },
     userInterest: {
       type: Number,
@@ -57,14 +63,13 @@ const discoverySchema = new Schema<IDiscovery & Document>(
   },
   {
     timestamps: true,
-    indexes: [
-      { userId: 1, domain: 1 },
-      { userId: 1, discoveredAt: -1 },
-      { domain: 1, importance: -1 },
-      { userId: 1, userInterest: -1 },
-    ],
   }
 );
+
+discoverySchema.index({ userId: 1, domain: 1 });
+discoverySchema.index({ userId: 1, discoveredAt: -1 });
+discoverySchema.index({ domain: 1, importance: -1 });
+discoverySchema.index({ userId: 1, userInterest: -1 });
 
 export const Discovery = mongoose.models.Discovery as mongoose.Model<IDiscovery & Document> || mongoose.model<IDiscovery & Document>(
   'Discovery',

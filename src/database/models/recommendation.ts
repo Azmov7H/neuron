@@ -4,9 +4,9 @@
  */
 
 import mongoose, { Schema, Document } from 'mongoose';
-import { IRecommendation, RecommendationProfile } from '@/types';
+import { IRecommendation, RecommendationProfile as RecommendationProfileType } from '@/types';
 
-const RecommendationProfileSchema = new Schema<RecommendationProfile>(
+const RecommendationProfileSchema = new Schema<RecommendationProfileType>(
   {
     userId: {
       type: Schema.Types.ObjectId,
@@ -98,15 +98,14 @@ const recommendationSchema = new Schema<IRecommendation & Document>(
   },
   {
     timestamps: true,
-    indexes: [
-      { userId: 1, type: 1, createdAt: -1 },
-      { userId: 1, relevanceScore: -1 },
-      { expiresAt: 1 },
-    ],
   }
 );
 
-export const RecommendationProfile = mongoose.models.RecommendationProfile as mongoose.Model<RecommendationProfile> || mongoose.model<RecommendationProfile>(
+recommendationSchema.index({ userId: 1, type: 1, createdAt: -1 });
+recommendationSchema.index({ userId: 1, relevanceScore: -1 });
+recommendationSchema.index({ expiresAt: 1 });
+
+export const RecommendationProfile = mongoose.models.RecommendationProfile as mongoose.Model<RecommendationProfileType> || mongoose.model<RecommendationProfileType>(
   'RecommendationProfile',
   RecommendationProfileSchema
 );

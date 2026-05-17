@@ -3,7 +3,7 @@
  * Token generation, verification, and payload handling
  */
 
-import jwt, { JwtPayload } from 'jsonwebtoken';
+import jwt, { JwtPayload, Secret, SignOptions } from 'jsonwebtoken';
 import { config } from '@/config/env';
 import { JWTPayload, AuthTokens } from '@/types';
 
@@ -11,20 +11,26 @@ import { JWTPayload, AuthTokens } from '@/types';
  * Generate access token
  */
 export function generateAccessToken(payload: Omit<JWTPayload, 'iat' | 'exp'>): string {
-  return jwt.sign(payload, config.auth.jwtSecret, {
-    expiresIn: config.auth.jwtExpiration,
+  const jwtSecret: Secret = config.auth.jwtSecret;
+  const options: SignOptions = {
+    expiresIn: config.auth.jwtExpiration as SignOptions['expiresIn'],
     algorithm: 'HS256',
-  });
+  };
+
+  return jwt.sign(payload, jwtSecret, options);
 }
 
 /**
  * Generate refresh token
  */
 export function generateRefreshToken(userId: string): string {
-  return jwt.sign({ userId }, config.auth.refreshTokenSecret, {
-    expiresIn: config.auth.refreshTokenExpiration,
+  const refreshSecret: Secret = config.auth.refreshTokenSecret;
+  const options: SignOptions = {
+    expiresIn: config.auth.refreshTokenExpiration as SignOptions['expiresIn'],
     algorithm: 'HS256',
-  });
+  };
+
+  return jwt.sign({ userId }, refreshSecret, options);
 }
 
 /**
@@ -50,7 +56,8 @@ export function generateTokens(payload: Omit<JWTPayload, 'iat' | 'exp'>): AuthTo
  */
 export function verifyAccessToken(token: string): JWTPayload | null {
   try {
-    const decoded = jwt.verify(token, config.auth.jwtSecret) as JWTPayload;
+    const jwtSecret: Secret = config.auth.jwtSecret;
+    const decoded = jwt.verify(token, jwtSecret) as JWTPayload;
     return decoded;
   } catch {
     return null;
@@ -62,7 +69,8 @@ export function verifyAccessToken(token: string): JWTPayload | null {
  */
 export function verifyRefreshToken(token: string): { userId: string } | null {
   try {
-    const decoded = jwt.verify(token, config.auth.refreshTokenSecret) as {
+    const refreshSecret: Secret = config.auth.refreshTokenSecret;
+    const decoded = jwt.verify(token, refreshSecret) as {
       userId: string;
     };
     return decoded;
@@ -85,7 +93,7 @@ export function decodeToken(token: string): JwtPayload | null {
 /**
  * Extract token from Authorization header
  */
-export function extractTokenFromHeader(authHeader?: string): string | null {
+export function extractTokenFromHeader(authHeader?: string | null): string | null {
   if (!authHeader) return null;
 
   const parts = authHeader.split(' ');

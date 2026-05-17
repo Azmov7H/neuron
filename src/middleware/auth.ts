@@ -73,7 +73,10 @@ export function withRateLimit(
   windowMs = 60000 // 1 minute
 ) {
   return async (request: NextRequest, context: any) => {
-    const identifier = request.ip || 'anonymous';
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    const realIp = request.headers.get('x-real-ip');
+    const identifier =
+      forwardedFor?.split(',')[0].trim() || realIp || 'anonymous';
     const now = Date.now();
 
     let record = rateLimitStore.get(identifier);

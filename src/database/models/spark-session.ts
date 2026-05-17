@@ -6,6 +6,10 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { ISparkSession, SparkMessage } from '@/types';
 
+interface ISparkSessionDocument extends Omit<ISparkSession, '_id'>, Document {
+  addMessage(role: 'user' | 'assistant', content: string, metadata?: SparkMessage['metadata']): void;
+}
+
 const SparkMessageSchema = new Schema<SparkMessage>(
   {
     role: {
@@ -32,7 +36,7 @@ const SparkMessageSchema = new Schema<SparkMessage>(
   { _id: false }
 );
 
-const sparkSessionSchema = new Schema<ISparkSession & Document>(
+const sparkSessionSchema = new Schema<ISparkSessionDocument>(
   {
     userId: {
       type: Schema.Types.ObjectId,
@@ -54,7 +58,10 @@ const sparkSessionSchema = new Schema<ISparkSession & Document>(
       },
     },
     context: {
-      currentPathId: Schema.Types.ObjectId,
+      currentPathId: {
+        type: Schema.Types.ObjectId,
+        ref: 'NeuralPath',
+      },
       currentChapterId: String,
       userLevel: { type: Number, default: 0 },
       recentConcepts: [String],
@@ -81,12 +88,11 @@ const sparkSessionSchema = new Schema<ISparkSession & Document>(
   },
   {
     timestamps: true,
-    indexes: [
-      { userId: 1, domain: 1, createdAt: -1 },
-      { expiresAt: 1 },
-    ],
   }
 );
+
+sparkSessionSchema.index({ userId: 1, domain: 1, createdAt: -1 });
+sparkSessionSchema.index({ expiresAt: 1 });
 
 // Method: add message to session
 sparkSessionSchema.methods.addMessage = function (
@@ -107,7 +113,7 @@ sparkSessionSchema.methods.addMessage = function (
   this.updatedAt = new Date();
 };
 
-export const SparkSession = mongoose.models.SparkSession as mongoose.Model<ISparkSession & Document> || mongoose.model<ISparkSession & Document>(
+export const SparkSession = mongoose.models.SparkSession as mongoose.Model<ISparkSessionDocument> || mongoose.model<ISparkSessionDocument>(
   'SparkSession',
   sparkSessionSchema
 );

@@ -8,6 +8,12 @@ import { IUser, CognitiveProfile, UserDomainStatus } from '@/types';
 import bcrypt from 'bcryptjs';
 import { config } from '@/config/env';
 
+interface IUserDocument extends Omit<IUser, '_id'>, Document {
+  comparePassword(candidatePassword: string): Promise<boolean>;
+  calculateRank(): string;
+  toJSON(): any;
+}
+
 const CognitiveProfileSchema = new Schema<CognitiveProfile>(
   {
     learningStyle: {
@@ -37,7 +43,7 @@ const UserDomainStatusSchema = new Schema<UserDomainStatus>(
   { _id: false }
 );
 
-const userSchema = new Schema<IUser & Document>(
+const userSchema = new Schema<IUserDocument>(
   {
     username: {
       type: String,
@@ -85,14 +91,13 @@ const userSchema = new Schema<IUser & Document>(
   },
   {
     timestamps: true,
-    indexes: [
-      { email: 1 },
-      { username: 1 },
-      { totalXP: -1 },
-      { createdAt: -1 },
-    ],
   }
 );
+
+userSchema.index({ email: 1 });
+userSchema.index({ username: 1 });
+userSchema.index({ totalXP: -1 });
+userSchema.index({ createdAt: -1 });
 
 // Pre-save hook: hash password if modified
 userSchema.pre<IUser & Document>('save', async function () {
@@ -127,4 +132,4 @@ userSchema.methods.toJSON = function () {
   return user;
 };
 
-export const User = mongoose.models.User as mongoose.Model<IUser & Document> || mongoose.model<IUser & Document>('User', userSchema);
+export const User = mongoose.models.User as mongoose.Model<IUserDocument> || mongoose.model<IUserDocument>('User', userSchema);

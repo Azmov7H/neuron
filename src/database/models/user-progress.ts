@@ -59,13 +59,12 @@ const userProgressSchema = new Schema<IUserProgress & Document>(
   },
   {
     timestamps: true,
-    indexes: [
-      { userId: 1, pathId: 1, unique: true },
-      { userId: 1, lastAccessedAt: -1 },
-      { pathId: 1, overallCompletion: -1 },
-    ],
   }
 );
+
+userProgressSchema.index({ userId: 1, pathId: 1 }, { unique: true });
+userProgressSchema.index({ userId: 1, lastAccessedAt: -1 });
+userProgressSchema.index({ pathId: 1, overallCompletion: -1 });
 
 // Update lastAccessedAt on save
 userProgressSchema.pre<IUserProgress & Document>('save', async function () {
