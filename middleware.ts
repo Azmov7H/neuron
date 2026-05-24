@@ -38,16 +38,11 @@ export function middleware(request: NextRequest): NextResponse {
 }
 
 export const config = {
+  // Protect all routes except explicitly public ones.
+  // Next.js matcher supports glob patterns; we match any path that does not start with
+  // the following prefixes: /auth, /api/auth, /_next, /favicon.ico, and the root marketing page.
+  // This ensures dashboard, settings, and any future platform routes are secured.
   matcher: [
-    /*
-     * Match all paths EXCEPT:
-     *  - /auth/*          → login/register pages
-     *  - /api/auth/*      → auth API routes
-     *  - /_next/*         → Next.js internals
-     *  - /favicon.ico
-     *  - / (marketing landing page)
-     */
-    '/dashboard/:path*',
-    '/(platform)/:path*',
+    '/((?!auth|api/auth|_next|favicon.ico).*)',
   ],
 };

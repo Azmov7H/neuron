@@ -38,12 +38,7 @@ type FormValues = z.infer<typeof formSchema>;
  * /api/auth/session so the Next.js middleware can protect private routes.
  */
 async function persistSession(accessToken: string, refreshToken: string, user: unknown) {
-  // 1. localStorage — for client-side API calls
-  localStorage.setItem("neuronAccessToken", accessToken);
-  localStorage.setItem("neuronRefreshToken", refreshToken);
-  localStorage.setItem("neuronUser", JSON.stringify(user ?? {}));
-
-  // 2. httpOnly cookie — for Next.js Edge middleware
+  // Set httpOnly session cookie for Next.js Edge middleware
   await fetch("/api/auth/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
