@@ -17,12 +17,9 @@ export default function EvolutionPage() {
   useEffect(() => {
     async function fetchEvolutionData() {
       try {
-        const token = localStorage.getItem("neuronAccessToken");
-        if (!token) return;
-
         const [resMe, resLogs] = await Promise.all([
-          fetch("/api/evolution/me", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("/api/evolution/logs", { headers: { Authorization: `Bearer ${token}` } }),
+          fetch("/api/evolution/me"),
+          fetch("/api/evolution/logs"),
         ]);
 
         if (resMe.ok && resLogs.ok) {

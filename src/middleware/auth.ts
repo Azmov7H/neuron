@@ -30,7 +30,11 @@ type RouteHandler = (
  */
 export function authenticateRequest(request: NextRequest): RequestContext | null {
   const authHeader = request.headers.get('authorization');
-  const token = extractTokenFromHeader(authHeader);
+  let token = extractTokenFromHeader(authHeader);
+
+  if (!token) {
+    token = request.cookies.get('neuron_session')?.value || null;
+  }
 
   if (!token) return null;
 

@@ -22,15 +22,9 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchSummary = async () => {
       try {
-        const token = localStorage.getItem("neuronAccessToken");
-        if (!token) {
-          window.location.href = "/auth/login";
-          return;
-        }
+        // Token handled via httpOnly cookie; no client-side token needed
 
-        const res = await fetch("/api/dashboard/summary", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await fetch("/api/dashboard/summary");
         
         const payload = await res.json();
         

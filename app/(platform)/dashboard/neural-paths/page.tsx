@@ -15,13 +15,7 @@ export default function NeuralPathsPage() {
   useEffect(() => {
     async function fetchPaths() {
       try {
-        const token = localStorage.getItem("neuronAccessToken");
-        if (!token) return;
-
-        const res = await fetch("/api/neural-paths", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
+        const res = await fetch("/api/neural-paths");
         const data = await res.json();
         setPaths(data.data?.items || []);
       } catch (err) {
