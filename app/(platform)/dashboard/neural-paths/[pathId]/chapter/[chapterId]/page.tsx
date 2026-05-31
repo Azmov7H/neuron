@@ -20,11 +20,10 @@ export default function ChapterViewPage() {
   useEffect(() => {
     async function fetchChapter() {
       try {
-        const token = localStorage.getItem("neuronAccessToken");
-        if (!token) return;
 
         const res = await fetch(`/api/neural-paths/${pathId}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
         });
 
         if (res.ok) {
@@ -48,14 +47,12 @@ export default function ChapterViewPage() {
     setCompleting(true);
 
     try {
-      const token = localStorage.getItem("neuronAccessToken");
-      if (!token) return;
 
       const res = await fetch("/api/neural-paths/complete-chapter", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ pathId: pathData._id, chapterId }),
       });

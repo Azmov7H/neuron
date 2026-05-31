@@ -12,11 +12,10 @@ export default function DomainsPage() {
   useEffect(() => {
     async function fetchDomains() {
       try {
-        const token = localStorage.getItem("neuronAccessToken");
-        if (!token) return;
 
         const res = await fetch("/api/explore/domains", {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
         });
 
         const data = await res.json();
@@ -33,14 +32,12 @@ export default function DomainsPage() {
 
   const handleDomainClick = async (name: string) => {
     try {
-      const token = localStorage.getItem("neuronAccessToken");
-      if (!token) return;
 
       await fetch("/api/explore/activity", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ action: 'view_domain', targetId: name }),
       });

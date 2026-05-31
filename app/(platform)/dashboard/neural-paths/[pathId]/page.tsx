@@ -16,11 +16,10 @@ export default function PathDetailsPage() {
   useEffect(() => {
     async function fetchPathDetails() {
       try {
-        const token = localStorage.getItem("neuronAccessToken");
-        if (!token) return;
 
         const res = await fetch(`/api/neural-paths/${pathId}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
         });
 
         if (res.ok) {

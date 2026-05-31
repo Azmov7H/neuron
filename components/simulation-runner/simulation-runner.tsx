@@ -100,10 +100,11 @@ const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, {
         name: "Pathogen SIR Spread",
         desc: "Model dynamic virus transmission through compartment interactions (Susceptible-Infected-Recovered).",
         equation: "R_0 = \\frac{\\beta}{\\gamma}",
-        defaultParams: { transmissionRate: 0.5, recoveryRate: 0.1 },
+        defaultParams: { transmissionRate: 0.5, recoveryRate: 0.1, populationSize: 120 },
         paramsList: [
           { key: "transmissionRate", label: "Transmission Rate (\u03b2)", min: 0.1, max: 0.9, step: 0.05 },
-          { key: "recoveryRate", label: "Recovery Frequency (\u03b3)", min: 0.02, max: 0.3, step: 0.01 }
+          { key: "recoveryRate", label: "Recovery Frequency (\u03b3)", min: 0.02, max: 0.3, step: 0.01 },
+          { key: "populationSize", label: "Population Size (N)", min: 30, max: 300, step: 10 }
         ]
       },
       {
@@ -281,6 +282,10 @@ class SimulationEngine {
   public stateSnapshot: Record<string, any> = {};
   public isRunning: boolean = true;
   public timeStep: number = 0;
+
+  // High-DPI logical dimensions (separate from canvas pixel buffer)
+  private logicalW: number = 760;
+  private logicalH: number = 480;
   
   private animId: number | null = null;
   private onStateSync: (snap: Record<string, any>) => void;
@@ -312,12 +317,43 @@ class SimulationEngine {
     this.simId = simId;
     this.parameters = { ...params };
     this.onStateSync = onStateSync;
+
+    // Initialize logical dimensions from the CSS-rendered container size
+    this.logicalW = canvas.clientWidth || 760;
+    this.logicalH = canvas.clientHeight || 480;
+    this.applyDprResize();
     
     this.initSubSimData();
   }
 
+  // SIM-BUG-001: Apply physical pixel buffer scaling for Retina/High-DPI displays
+  private applyDprResize() {
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+    const lw = this.canvas.clientWidth || this.logicalW;
+    const lh = this.canvas.clientHeight || this.logicalH;
+    const targetW = Math.round(lw * dpr);
+    const targetH = Math.round(lh * dpr);
+    if (this.canvas.width !== targetW || this.canvas.height !== targetH) {
+      this.canvas.width = targetW;
+      this.canvas.height = targetH;
+      this.logicalW = lw;
+      this.logicalH = lh;
+      // Clamp existing particles into new bounds
+      this.clampParticlesToBounds(lw, lh);
+    }
+  }
+
+  // Gracefully keep all live particles within the new logical canvas bounds on resize
+  private clampParticlesToBounds(lw: number, lh: number) {
+    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+    this.sirParticles.forEach(p => { p.x = clamp(p.x, 20, lw - 20); p.y = clamp(p.y, 20, lh - 20); });
+    this.wbcList.forEach(p => { p.x = clamp(p.x, 20, lw - 20); p.y = clamp(p.y, 20, lh - 20); });
+    this.pathogenList.forEach(p => { p.x = clamp(p.x, 20, lw - 20); p.y = clamp(p.y, 20, lh - 20); });
+    this.nodesList.forEach(p => { p.x = clamp(p.x, 20, lw - 20); p.y = clamp(p.y, 20, lh - 20); });
+  }
+
+  // SIM-BUG-007: Respect externally-set isRunning state instead of force-overriding to true
   public start() {
-    this.isRunning = true;
     if (!this.animId) {
       this.tick(0);
     }
@@ -357,8 +393,8 @@ class SimulationEngine {
   }
 
   private initSubSimData() {
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+    const w = this.logicalW;
+    const h = this.logicalH;
 
     if (this.simId === 'immune') {
       this.wbcList = [];
@@ -385,8 +421,10 @@ class SimulationEngine {
         });
       }
     } else if (this.simId === 'virus') {
+      // SIM-BUG-005: Respect populationSize parameter for configurable particle density
+      const pop = Math.round(this.parameters.populationSize ?? 120);
       this.sirParticles = [];
-      for (let i = 0; i < 120; i++) {
+      for (let i = 0; i < pop; i++) {
         this.sirParticles.push({
           x: Math.random() * (w - 40) + 20,
           y: Math.random() * (h - 60) + 40,
@@ -440,8 +478,8 @@ class SimulationEngine {
   }
 
   private updatePhysics() {
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+    const w = this.logicalW;
+    const h = this.logicalH;
 
     switch (this.simId) {
       case 'motion': {
@@ -650,16 +688,16 @@ class SimulationEngine {
       }
 
       case 'graph': {
-        const nodes = this.parameters.nodesCount ?? 30;
+        // SIM-BUG-003: O(n²/2) Symmetric Repulsion Forces — halves distance calculations per frame
+        const nodeCount = this.parameters.nodesCount ?? 30;
         const cx = w / 2;
         const cy = h / 2;
 
-        for (let i = 0; i < nodes; i++) {
+        for (let i = 0; i < nodeCount; i++) {
           const n1 = this.nodesList[i];
           if (!n1) continue;
 
-          for (let j = 0; j < nodes; j++) {
-            if (i === j) continue;
+          for (let j = i + 1; j < nodeCount; j++) {
             const n2 = this.nodesList[j];
             if (!n2) continue;
 
@@ -668,11 +706,17 @@ class SimulationEngine {
             const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
             if (dist < 100) {
-              n1.vx += (dx / dist) * (30 / dist);
-              n1.vy += (dy / dist) * (30 / dist);
+              // Apply Newton's 3rd Law — equal and opposite — one sqrt per pair
+              const fx = (dx / dist) * (30 / dist);
+              const fy = (dy / dist) * (30 / dist);
+              n1.vx += fx;
+              n1.vy += fy;
+              n2.vx -= fx;
+              n2.vy -= fy;
             }
           }
 
+          // Gravity towards center and velocity integration
           const dcx = cx - n1.x;
           const dcy = cy - n1.y;
           n1.vx += dcx * 0.015;
@@ -689,10 +733,18 @@ class SimulationEngine {
   }
 
   private draw() {
+    // SIM-BUG-001: Apply Retina/High-DPI DPR resize and logical scaling
+    this.applyDprResize();
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+
     const ctx = this.ctx;
-    const w = this.canvas.width;
-    const h = this.canvas.height;
+    const w = this.logicalW;  // Logical width (CSS pixels)
+    const h = this.logicalH;  // Logical height (CSS pixels)
     const t = this.timeStep;
+
+    // Scale context so all draw calls use logical pixel coordinates
+    ctx.save();
+    ctx.scale(dpr, dpr);
 
     // Dark Scientific Theme Base
     ctx.fillStyle = "#030305";
@@ -1248,7 +1300,8 @@ class SimulationEngine {
       case 'blackhole': {
         const mass = this.parameters.blackholeMass ?? 10;
         const dist = this.parameters.probeDistance ?? 22;
-        const rs = mass * 4.2;
+        // SIM-BUG-006: Schwarzschild radius multiplier aligned with backend (2.95 km/M☉ proxy)
+        const rs = mass * 2.95;
         const cx = w / 2;
         const cy = h / 2;
 
@@ -1587,13 +1640,11 @@ export function SimulationRunner({ slug }: { slug: string }) {
     const stateSnapshot = eng ? { ...eng.stateSnapshot } : {};
 
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("neuronAccessToken") : null;
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (token) headers["Authorization"] = `Bearer ${token}`;
-
+      // SIM-BUG-002: Use credential-forwarding cookies (neuron_session httpOnly) instead of insecure localStorage
       const response = await fetch("/api/simulations/interpret", {
         method: "POST",
-        headers,
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           domain: activeDomain,
           simulationId: activeSimId,

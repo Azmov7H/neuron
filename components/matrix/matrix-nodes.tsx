@@ -8,41 +8,19 @@ import { nodes, domainColors, MatrixNode } from "@/lib/matrix-data";
 import { useMatrixStore, LayoutMode, ExplorationDepth } from "./matrix-store";
 import * as THREE from "three";
 
-// ==================================================
-// BFS PATHFINDER FOR PATH TRACING
-// ==================================================
-export function findShortestPath(startId: string, endId: string): string[] {
-  if (startId === endId) return [startId];
-  const queue: [string, string[]][] = [[startId, [startId]]];
-  const visited = new Set<string>([startId]);
-
-  while (queue.length > 0) {
-    const [curr, path] = queue.shift()!;
-    if (curr === endId) return path;
-
-    const currNode = nodes.find(n => n.id === curr);
-    if (currNode) {
-      for (const neighbor of currNode.connections) {
-        if (!visited.has(neighbor)) {
-          visited.add(neighbor);
-          queue.push([neighbor, [...path, neighbor]]);
-        }
-      }
-    }
-  }
-  return [];
-}
+// Re-export findShortestPath from store to maintain compatibility with other modules
+export { findShortestPath } from "./matrix-store";
 
 function SingleNode({ node }: { node: MatrixNode }) {
   const meshRef = useRef<THREE.Mesh>(null);
   const ringRef = useRef<THREE.Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
   const [hovered, setHovered] = useState(false);
   
   // Zustand Store parameters
   const selectedNodeId = useMatrixStore((state) => state.selectedNodeId);
   const hoveredNodeId = useMatrixStore((state) => state.hoveredNodeId);
-  const expandedNodeIds = useMatrixStore((state) => state.expandedNodeIds);
-  const zoomLevel = useMatrixStore((state) => state.zoomLevel);
+  const activePath = useMatrixStore((state) => state.activePath);
   
   const density = useMatrixStore((state) => state.density);
   const activeDomains = useMatrixStore((state) => state.activeDomains);
@@ -62,16 +40,6 @@ function SingleNode({ node }: { node: MatrixNode }) {
   const isCompared = compareNodeId === node.id;
   const isHovered = hoveredNodeId === node.id || hovered;
   const color = domainColors[node.domain];
-
-  // ==================================================
-  // PATH TRACING ANALYSIS
-  // ==================================================
-  const activePath = useMemo(() => {
-    if (selectedNodeId && pathTracingTargetId) {
-      return findShortestPath(selectedNodeId, pathTracingTargetId);
-    }
-    return [];
-  }, [selectedNodeId, pathTracingTargetId]);
 
   const isAlongPath = activePath.includes(node.id);
 
@@ -112,11 +80,12 @@ function SingleNode({ node }: { node: MatrixNode }) {
   }, [layoutMode, node]);
 
   // ==================================================
-  // UNIFIED VISIBILITY GATE PREDICATE
+  // UNIFIED VISIBILITY GATE PREDICATE (CASE-INSENSITIVE)
   // ==================================================
   const isVisible = useMemo(() => {
-    // 1. Global Domain Filtering
-    if (!activeDomains.includes(node.domain)) return false;
+    // 1. Global Domain Filtering (normalized to lowercase to support database discrepancies)
+    const normalizedDomains = activeDomains.map(d => d.toLowerCase());
+    if (!normalizedDomains.includes(node.domain.toLowerCase())) return false;
 
     // 2. Exploration Depth thresholds
     if (explorationDepth === 1 && node.layer > 1) return false;
@@ -216,48 +185,50 @@ function SingleNode({ node }: { node: MatrixNode }) {
   }
 
   // ==================================================
-  // 60 FPS GRAPHICS RENDERING TICK
+  // 60 FPS GRAPHICS RENDERING TICK (SYNCHRONIZED GROUP INTERPOLATION)
   // ==================================================
   useFrame(({ clock }) => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
+    const group = groupRef.current;
+    if (!group) return;
 
     const t = clock.getElapsedTime();
 
-    // 1. Floating space micro-bobbing animation
+    // 1. Floating space micro-bobbing animation directly on parent group
     if (targetOpacity > 0.05) {
       const bobbing = Math.sin(t * 1.2 + node.position[0] * 0.4) * 0.12;
-      mesh.position.copy(targetPos);
-      mesh.position.y += bobbing;
+      group.position.copy(targetPos);
+      group.position.y += bobbing;
     } else {
-      mesh.position.copy(targetPos);
+      group.position.copy(targetPos);
     }
 
-    // 2. Scale coordinate lerp with micro-breathing pulse
-    const breathe = targetOpacity > 0.05 ? 1.0 + Math.sin(t * 1.5 + node.position[0]) * 0.06 : 1.0;
-    mesh.scale.setScalar(THREE.MathUtils.lerp(mesh.scale.x, targetScale * breathe, 0.08));
+    const mesh = meshRef.current;
+    if (mesh) {
+      // 2. Scale coordinate lerp with micro-breathing pulse
+      const breathe = targetOpacity > 0.05 ? 1.0 + Math.sin(t * 1.5 + node.position[0]) * 0.06 : 1.0;
+      mesh.scale.setScalar(THREE.MathUtils.lerp(mesh.scale.x, targetScale * breathe, 0.08));
 
-    // 3. Material opacity and glow breathing pulses
-    const mat = mesh.material as THREE.MeshStandardMaterial;
-    if (mat) {
-      mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.08);
-      const breatheGlow = 1.0 + Math.sin(t * 2.2 + node.position[0]) * 0.15;
-      
-      // Highlight path nodes with pure cyan emissive shift if along path
-      if (isAlongPath) {
-        mat.emissive.setHex(0x06b6d4);
-      } else {
-        mat.emissive.copy(new THREE.Color(color));
+      // 3. Material opacity and glow breathing pulses
+      const mat = mesh.material as THREE.MeshStandardMaterial;
+      if (mat) {
+        mat.opacity = THREE.MathUtils.lerp(mat.opacity, targetOpacity, 0.08);
+        const breatheGlow = 1.0 + Math.sin(t * 2.2 + node.position[0]) * 0.15;
+        
+        // Highlight path nodes with pure cyan emissive shift if along path
+        if (isAlongPath) {
+          mat.emissive.setHex(0x06b6d4);
+        } else {
+          mat.emissive.copy(new THREE.Color(color));
+        }
+        
+        mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetGlow * breatheGlow, 0.08);
+        mesh.visible = mat.opacity > 0.005;
       }
-      
-      mat.emissiveIntensity = THREE.MathUtils.lerp(mat.emissiveIntensity, targetGlow * breatheGlow, 0.08);
-      mesh.visible = mat.opacity > 0.005;
     }
 
-    // 4. Spin cybernetic ring helper
+    // 4. Spin cybernetic ring helper (relative spin inside group)
     const ring = ringRef.current;
     if (ring) {
-      ring.position.copy(mesh.position);
       ring.rotation.z = t * 0.5;
       ring.rotation.y = t * 0.2;
     }
@@ -268,12 +239,12 @@ function SingleNode({ node }: { node: MatrixNode }) {
   const shouldShowLabel = targetOpacity > 0.15 && isInteractiveLabel;
 
   return (
-    <group>
+    <group ref={groupRef} position={[node.position[0], node.position[1], node.position[2]]}>
       {/* Node Sphere with Neon emissive glow */}
       <Sphere 
         ref={meshRef} 
         args={[0.65, 32, 32]} 
-        position={[node.position[0], node.position[1], node.position[2]]}
+        position={[0, 0, 0]}
         onClick={(e) => {
           e.stopPropagation();
           setSelectedNode(isSelected ? null : node.id);
@@ -301,7 +272,7 @@ function SingleNode({ node }: { node: MatrixNode }) {
 
       {/* Cybernetic outer rotating ring for active focus/compared/path/hovered nodes */}
       {targetOpacity > 0.15 && (isSelected || isCompared || isAlongPath || isHovered) && (
-        <mesh ref={ringRef} position={[node.position[0], node.position[1], node.position[2]]}>
+        <mesh ref={ringRef} position={[0, 0, 0]}>
           <ringGeometry args={[0.75 * targetScale, 0.85 * targetScale, 32]} />
           <meshBasicMaterial 
             color={isAlongPath ? "#06b6d4" : color} 
@@ -317,7 +288,7 @@ function SingleNode({ node }: { node: MatrixNode }) {
         <Html 
           center 
           distanceFactor={28} 
-          position={[node.position[0], node.position[1] + 0.85, node.position[2]]}
+          position={[0, 0.85, 0]}
           style={{ transition: "all 0.3s ease" }}
         >
           <div 

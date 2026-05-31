@@ -1,13 +1,18 @@
 // components/matrix/matrix-edges.tsx
 "use client";
 
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useCallback } from "react";
 import { useFrame } from "@react-three/fiber";
 import { nodes, edges, domainColors, MatrixNode, MatrixEdge } from "@/lib/matrix-data";
 import { useMatrixStore, LayoutMode } from "./matrix-store";
-import { findShortestPath } from "./matrix-nodes";
 import { Line } from "@react-three/drei";
 import * as THREE from "three";
+
+// Case-insensitive domain color retriever
+const getDomainColor = (domain: string): string => {
+  const entry = Object.entries(domainColors).find(([k]) => k.toLowerCase() === domain.toLowerCase());
+  return entry ? entry[1] : "#4b5563";
+};
 
 function SingleEdge({ edge }: { edge: MatrixEdge }) {
   const lineRef = useRef<any>(null);
@@ -15,7 +20,6 @@ function SingleEdge({ edge }: { edge: MatrixEdge }) {
   // Zustand Store variables
   const selectedNodeId = useMatrixStore((state) => state.selectedNodeId);
   const hoveredNodeId = useMatrixStore((state) => state.hoveredNodeId);
-  const zoomLevel = useMatrixStore((state) => state.zoomLevel);
 
   const density = useMatrixStore((state) => state.density);
   const activeDomains = useMatrixStore((state) => state.activeDomains);
@@ -24,14 +28,16 @@ function SingleEdge({ edge }: { edge: MatrixEdge }) {
   const focusRadius = useMatrixStore((state) => state.focusRadius);
   const isolationMode = useMatrixStore((state) => state.isolationMode);
   const compareNodeId = useMatrixStore((state) => state.compareNodeId);
-  const pathTracingTargetId = useMatrixStore((state) => state.pathTracingTargetId);
-
+  
   const relationshipThreshold = useMatrixStore((state) => state.relationshipThreshold);
   const hideWeakConnections = useMatrixStore((state) => state.hideWeakConnections);
   const directOnly = useMatrixStore((state) => state.directOnly);
   const weightedEmphasis = useMatrixStore((state) => state.weightedEmphasis);
 
   const explorationDepth = useMatrixStore((state) => state.explorationDepth);
+
+  // Cached active shortest path from store
+  const activePath = useMatrixStore((state) => state.activePath);
 
   const startNode = useMemo(() => nodes.find(n => n.id === edge.source), [edge.source]);
   const endNode = useMemo(() => nodes.find(n => n.id === edge.target), [edge.target]);
@@ -94,16 +100,6 @@ function SingleEdge({ edge }: { edge: MatrixEdge }) {
     }
   }, [layoutMode, endNode]);
 
-  // ==================================================
-  // PATH TRACING SHORT PATH FINDER
-  // ==================================================
-  const activePath = useMemo(() => {
-    if (selectedNodeId && pathTracingTargetId) {
-      return findShortestPath(selectedNodeId, pathTracingTargetId);
-    }
-    return [];
-  }, [selectedNodeId, pathTracingTargetId]);
-
   const isAlongPath = useMemo(() => {
     if (activePath.length < 2) return false;
     for (let i = 0; i < activePath.length - 1; i++) {
@@ -116,11 +112,12 @@ function SingleEdge({ edge }: { edge: MatrixEdge }) {
   }, [activePath, edge]);
 
   // ==================================================
-  // UNIFIED VISIBILITY GATE (MATCHES NODE FILTERING)
+  // UNIFIED VISIBILITY GATE (MEMOIZED MEMORY-SAVING CALLBACK)
   // ==================================================
-  const isNodeVisible = (node: MatrixNode) => {
-    // 1. Global Domain Filtering
-    if (!activeDomains.includes(node.domain)) return false;
+  const isNodeVisible = useCallback((node: MatrixNode) => {
+    // 1. Global Domain Filtering (case-insensitive)
+    const normalizedDomains = activeDomains.map(d => d.toLowerCase());
+    if (!normalizedDomains.includes(node.domain.toLowerCase())) return false;
 
     // 2. Exploration Depth thresholds
     if (explorationDepth === 1 && node.layer > 1) return false;
@@ -172,7 +169,7 @@ function SingleEdge({ edge }: { edge: MatrixEdge }) {
     }
 
     return true;
-  };
+  }, [activeDomains, explorationDepth, selectedNodeId, hoveredNodeId, activePath, density, isolationMode, compareNodeId, focusRadius]);
 
   const baseStrength = edge.strength || 1;
 
@@ -214,7 +211,7 @@ function SingleEdge({ edge }: { edge: MatrixEdge }) {
         targetWidth = baseStrength * (weightedEmphasis ? 2.6 : 1.6);
         // Take color of the connected neighbor node
         const neighbor = isSelectedSource || isCompareSource ? endNode : startNode;
-        targetColorHex = domainColors[neighbor.domain];
+        targetColorHex = getDomainColor(neighbor.domain);
       } else {
         // Mute other background links in Focus Mode
         targetOpacity = 0.01;
@@ -227,7 +224,7 @@ function SingleEdge({ edge }: { edge: MatrixEdge }) {
         targetOpacity = 0.85;
         targetWidth = baseStrength * (weightedEmphasis ? 2.0 : 1.2);
         const hovered = isHoveredSource ? startNode : endNode;
-        targetColorHex = domainColors[hovered.domain];
+        targetColorHex = getDomainColor(hovered.domain);
       } else {
         targetOpacity = 0.15;
         targetWidth = baseStrength * (weightedEmphasis ? 1.0 : 0.6);

@@ -10,8 +10,11 @@ export default function DashboardLayout({
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Ambient Depth Glows - visible across entire dashboard */}
-      <div className="fixed top-0 left-1/4 w-[600px] h-[600px] bg-primary/5 rounded-full animate-breathe pointer-events-none" />
-      <div className="fixed bottom-0 right-1/4 w-[500px] h-[500px] bg-secondary/5 rounded-full animate-breathe pointer-events-none" style={{ animationDelay: "4s" }} />
+       {/* Background */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute top-0 left-0 w-[800px] h-[800px] rounded-full bg-secondary/10 blur-[150px]"></div>
+        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] rounded-full bg-primary/10 blur-[150px]"></div>
+      </div>
 
       <SideNav />
       

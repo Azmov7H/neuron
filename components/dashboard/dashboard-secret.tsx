@@ -8,25 +8,17 @@ export function DashboardSecret() {
   const [status, setStatus] = useState<string>("Loading dashboard secret...");
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? window.localStorage.getItem("neuronAccessToken") : null;
-
-    if (!token) {
-      setStatus("Sign in to unlock the dashboard secret.");
-      return;
-    }
-
     const fetchSecret = async () => {
       try {
+        // Use httpOnly session cookie via credentials: same-origin
         const response = await fetch("/api/dashboard/secret", {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          credentials: "same-origin",
         });
 
         const payload = await response.json();
 
         if (!response.ok) {
-          setStatus(payload?.message || "Failed to load dashboard secret.");
+          setStatus(payload?.message || "Sign in to unlock the dashboard secret.");
           return;
         }
 
