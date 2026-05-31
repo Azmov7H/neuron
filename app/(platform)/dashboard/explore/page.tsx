@@ -12,11 +12,10 @@ export default function ExplorePage() {
   useEffect(() => {
     async function fetchNavConfig() {
       try {
-        const token = localStorage.getItem("neuronAccessToken");
-        if (!token) return;
 
         const res = await fetch("/api/explore/navigation", {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
         });
 
         const data = await res.json();

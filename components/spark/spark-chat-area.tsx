@@ -99,23 +99,15 @@ export function SparkChatArea() {
     const domain = detectDomain(content);
 
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("neuronAccessToken") : null;
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      // Connect to the real streaming chat API endpoint
+      // Use httpOnly session cookie via credentials: same-origin — no localStorage token required
       const response = await fetch("/api/spark/chat", {
         method: "POST",
-        headers,
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           sessionId: sessionId || "new",
           content,
           domain,
-          // Context parameters can be added here if available in localstorage/props
         }),
       });
 

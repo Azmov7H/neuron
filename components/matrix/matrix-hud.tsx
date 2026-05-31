@@ -121,18 +121,13 @@ export function MatrixHUD() {
 
     const fetchStreamingSpark = async () => {
       try {
-        const token = typeof window !== "undefined" ? localStorage.getItem("neuronAccessToken") : null;
-        if (!token) throw new Error("No token found");
-
         const controller = new AbortController();
         abortControllerRef.current = controller;
 
         const response = await fetch("/api/spark/chat", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             sessionId: "new",
             content: prompt,

@@ -12,11 +12,10 @@ export default function TrendingPage() {
   useEffect(() => {
     async function fetchConcepts() {
       try {
-        const token = localStorage.getItem("neuronAccessToken");
-        if (!token) return;
 
         const res = await fetch("/api/explore/trending", {
-          headers: { Authorization: `Bearer ${token}` },
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
         });
 
         const data = await res.json();
@@ -33,14 +32,12 @@ export default function TrendingPage() {
 
   const handleConceptClick = async (name: string) => {
     try {
-      const token = localStorage.getItem("neuronAccessToken");
-      if (!token) return;
 
       await fetch("/api/explore/activity", {
         method: "POST",
+        credentials: "same-origin",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ action: 'view_concept', targetId: name }),
       });

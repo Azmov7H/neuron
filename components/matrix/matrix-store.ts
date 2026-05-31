@@ -1,8 +1,34 @@
 // components/matrix/matrix-store.ts
 import { create } from "zustand";
+import { nodes } from "@/lib/matrix-data";
 
 export type LayoutMode = "cluster" | "force" | "hierarchical";
 export type ExplorationDepth = 1 | 2 | 3 | 4;
+
+// ==================================================
+// BFS PATHFINDER FOR PATH TRACING (STATE-LEVEL)
+// ==================================================
+export function findShortestPath(startId: string, endId: string): string[] {
+  if (startId === endId) return [startId];
+  const queue: [string, string[]][] = [[startId, [startId]]];
+  const visited = new Set<string>([startId]);
+
+  while (queue.length > 0) {
+    const [curr, path] = queue.shift()!;
+    if (curr === endId) return path;
+
+    const currNode = nodes.find(n => n.id === curr);
+    if (currNode) {
+      for (const neighbor of currNode.connections) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push([neighbor, [...path, neighbor]]);
+        }
+      }
+    }
+  }
+  return [];
+}
 
 interface MatrixState {
   // Original States
@@ -12,6 +38,9 @@ interface MatrixState {
   zoomLevel: number; // camera distance from center
   cameraTarget: [number, number, number];
   cameraPosition: [number, number, number] | null;
+
+  // Caching shortest path to avoid redundant calculation per frame
+  activePath: string[];
 
   // Layer 1: Global View Controls
   density: number; // 0.1 to 1.0 (Low -> High node importance visibility)
@@ -65,6 +94,7 @@ export const useMatrixStore = create<MatrixState>((set) => ({
   zoomLevel: 20,
   cameraTarget: [0, 0, 0],
   cameraPosition: null,
+  activePath: [],
 
   density: 0.8,
   activeDomains: ALL_DOMAINS,
@@ -89,6 +119,7 @@ export const useMatrixStore = create<MatrixState>((set) => ({
         selectedNodeId: null,
         compareNodeId: null,
         pathTracingTargetId: null,
+        activePath: [],
         cameraTarget: [0, 0, 0],
         cameraPosition: [0, 0, 20]
       };
@@ -98,12 +129,16 @@ export const useMatrixStore = create<MatrixState>((set) => ({
       ? state.expandedNodeIds 
       : [...state.expandedNodeIds, id];
 
+    const targetId = state.pathTracingTargetId === id ? null : state.pathTracingTargetId;
+    const path = targetId ? findShortestPath(id, targetId) : [];
+
     return {
       selectedNodeId: id,
       expandedNodeIds: updatedExpanded,
       // If we clicked the same node as compareNodeId, clear compareNodeId
       compareNodeId: state.compareNodeId === id ? null : state.compareNodeId,
-      pathTracingTargetId: state.pathTracingTargetId === id ? null : state.pathTracingTargetId
+      pathTracingTargetId: targetId,
+      activePath: path
     };
   }),
 
@@ -124,6 +159,7 @@ export const useMatrixStore = create<MatrixState>((set) => ({
     compareNodeId: null,
     pathTracingTargetId: null,
     expandedNodeIds: [],
+    activePath: [],
     cameraTarget: [0, 0, 0],
     cameraPosition: [0, 0, 20],
     density: 0.8,
@@ -157,14 +193,21 @@ export const useMatrixStore = create<MatrixState>((set) => ({
   setCompareNodeId: (compareNodeId) => set((state) => ({ 
     compareNodeId,
     // Clear path tracing if transitioning to compare mode
-    pathTracingTargetId: compareNodeId ? null : state.pathTracingTargetId
+    pathTracingTargetId: compareNodeId ? null : state.pathTracingTargetId,
+    activePath: []
   })),
 
-  setPathTracingTargetId: (pathTracingTargetId) => set((state) => ({ 
-    pathTracingTargetId,
-    // Clear compare node if transitioning to path tracing mode
-    compareNodeId: pathTracingTargetId ? null : state.compareNodeId
-  })),
+  setPathTracingTargetId: (pathTracingTargetId) => set((state) => {
+    const path = state.selectedNodeId && pathTracingTargetId 
+      ? findShortestPath(state.selectedNodeId, pathTracingTargetId) 
+      : [];
+    return { 
+      pathTracingTargetId,
+      // Clear compare node if transitioning to path tracing mode
+      compareNodeId: pathTracingTargetId ? null : state.compareNodeId,
+      activePath: path
+    };
+  }),
 
   setRelationshipThreshold: (relationshipThreshold) => set({ relationshipThreshold }),
 

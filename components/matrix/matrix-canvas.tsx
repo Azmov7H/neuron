@@ -76,6 +76,7 @@ function CameraController() {
 
 export function MatrixCanvas() {
   const selectedNodeId = useMatrixStore((state) => state.selectedNodeId);
+  const hoveredNodeId = useMatrixStore((state) => state.hoveredNodeId);
 
   return (
     <Canvas camera={{ position: [0, 0, 22], fov: 55 }} dpr={[1, 2]}>
@@ -100,7 +101,7 @@ export function MatrixCanvas() {
         enablePan={true} 
         enableDamping={true}
         dampingFactor={0.05}
-        autoRotate={!selectedNodeId} // Turn off auto-rotation when focusing on a concept
+        autoRotate={!selectedNodeId && !hoveredNodeId} // Turn off auto-rotation when focusing or hovering on a concept
         autoRotateSpeed={0.18} 
         maxDistance={30} 
         minDistance={5}

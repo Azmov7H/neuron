@@ -46,7 +46,7 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center min-h-[500px]">
+      <div className="flex h-full items-center justify-center min-h-125">
         <Loader2 className="animate-spin text-primary w-8 h-8" />
       </div>
     );
@@ -54,7 +54,7 @@ export default function DashboardPage() {
 
   if (error || !summary) {
     return (
-      <div className="flex h-full items-center justify-center min-h-[500px] text-red-400 font-mono">
+      <div className="flex h-full items-center justify-center min-h-125 text-red-400 font-mono">
         {error || "Unknown error"}
       </div>
     );
@@ -63,8 +63,11 @@ export default function DashboardPage() {
   return (
     <main className="relative min-h-screen overflow-hidden">
       {/* Ambient Depth Particles/Glows */}
-      <div className="fixed top-0 left-1/4 w-[600px] h-[600px] bg-primary/5 rounded-full animate-breathe pointer-events-none" />
-      <div className="fixed bottom-0 right-1/4 w-[500px] h-[500px] bg-secondary/5 rounded-full animate-breathe pointer-events-none delay-4000" />
+ {/* Background */}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className="absolute top-0 left-0 w-[800px] h-[800px] rounded-full bg-secondary/10 blur-[150px]"></div>
+        <div className="absolute bottom-0 right-0 w-[600px] h-[600px] rounded-full bg-primary/10 blur-[150px]"></div>
+      </div>
       
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
         
