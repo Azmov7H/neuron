@@ -5,11 +5,18 @@
 
 const getEnv = (key: string, defaultValue?: string): string => {
   const value = process.env[key];
-  if (!value && defaultValue === undefined) {
-    throw new Error(`Missing required environment variable: ${key}`);
+  if (value && value.trim() !== '') {
+    return value;
   }
-  return value || defaultValue || '';
+
+  if (defaultValue !== undefined) {
+    return defaultValue;
+  }
+
+  throw new Error(`Missing required environment variable: ${key}`);
 };
+
+const nodeEnv = getEnv('NODE_ENV', 'development');
 
 export const config = {
   // Database
@@ -34,23 +41,26 @@ export const config = {
 
   // AI/LLM Integration
   ai: {
-    openaiApiKey: getEnv('OPENAI_API_KEY', ''),
+    openaiApiKey: process.env.OPENAI_API_KEY ?? '',
     openaiModel: getEnv('OPENAI_MODEL', 'gpt-4-turbo'),
     embeddingModel: getEnv('EMBEDDING_MODEL', 'text-embedding-3-small'),
   },
 
   // Server
   server: {
-    nodeEnv: getEnv('NODE_ENV', 'development'),
+    nodeEnv,
     port: parseInt(getEnv('PORT', '3000')),
-    dashboardSecret: getEnv('DASHBOARD_SECRET', 'hidden-by-default'),
-    isDevelopment: getEnv('NODE_ENV', 'development') === 'development',
-    isProduction: getEnv('NODE_ENV', 'development') === 'production',
+    dashboardSecret:
+      nodeEnv === 'production'
+        ? getEnv('DASHBOARD_SECRET')
+        : process.env.DASHBOARD_SECRET?.trim() || 'development-dashboard-secret',
+    isDevelopment: nodeEnv === 'development',
+    isProduction: nodeEnv === 'production',
   },
 
   // Caching
   cache: {
-    redisUrl: getEnv('REDIS_URL', ''),
+    redisUrl: process.env.REDIS_URL ?? '',
     enableRedis: getEnv('ENABLE_REDIS', 'false') === 'true',
     ttl: {
       user: parseInt(getEnv('CACHE_TTL_USER', '3600')), // 1 hour
@@ -66,3 +76,11 @@ export const config = {
     enableAnalytics: getEnv('ENABLE_ANALYTICS', 'true') === 'true',
   },
 };
+
+if (config.features.enableSparkAI && !config.ai.openaiApiKey) {
+  throw new Error('ENABLE_SPARK_AI is enabled but OPENAI_API_KEY is not configured.');
+}
+
+if (config.cache.enableRedis && !config.cache.redisUrl) {
+  throw new Error('ENABLE_REDIS is enabled but REDIS_URL is not configured.');
+}

@@ -1,6 +1,6 @@
 /**
  * POST /api/auth/register
- * Create a new user account
+ * Create a new user account without exposing auth tokens in JSON.
  */
 
 import { NextRequest } from 'next/server';
@@ -11,6 +11,7 @@ import { AuthService } from '@/modules/auth/auth.service';
 import { ApiResponseHandler, zodValidationError } from '@/lib/utils/response';
 import { RegisterSchema } from '@/validations/schemas';
 import { withErrorHandling, withRateLimit } from '@/middleware/auth';
+import { requireCsrfProtection } from '@/lib/security/csrf';
 
 async function handler(request: NextRequest) {
   await connectDB();
@@ -30,9 +31,12 @@ async function handler(request: NextRequest) {
 
   const result = await AuthService.register(validatedData);
 
-  return ApiResponseHandler.created(result, 'Account created successfully');
+  return ApiResponseHandler.created(
+    { user: result.user },
+    'Account created successfully'
+  );
 }
 
 export const POST = withErrorHandling(
-  withRateLimit(handler, 50, 3_600_000) // 50 registrations per hour per IP (production only)
+  withRateLimit(requireCsrfProtection(handler), 50, 3_600_000) // 50 registrations per hour per IP (production only)
 );

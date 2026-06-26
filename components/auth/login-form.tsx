@@ -9,7 +9,7 @@ import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Card, CardFooter, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
@@ -33,17 +33,18 @@ type FormValues = z.infer<typeof formSchema>;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/**
- * Stores token in localStorage AND sets the httpOnly session cookie via
- * /api/auth/session so the Next.js middleware can protect private routes.
- */
-async function persistSession(accessToken: string, refreshToken: string, user: unknown) {
-  // Set httpOnly session cookie for Next.js Edge middleware
-  await fetch("/api/auth/session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accessToken }),
-  });
+async function fetchCsrfToken() {
+  const response = await fetch('/api/auth/csrf');
+  if (!response.ok) {
+    throw new Error('Unable to obtain CSRF token');
+  }
+
+  const payload = await response.json();
+  return payload?.data?.csrfToken as string | undefined;
+}
+
+function getCsrfHeader(csrfToken: string | undefined): Record<string, string> {
+  return csrfToken ? { 'x-csrf-token': csrfToken } : {};
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -54,6 +55,8 @@ export function LoginForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Allow `any` here to accommodate resolver type differences between
+  // `@hookform/resolvers` and `zod` minor-version typings.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema as any),
@@ -65,35 +68,35 @@ export function LoginForm() {
     setErrorMessage(null);
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const csrfToken = await fetchCsrfToken();
+
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCsrfHeader(csrfToken),
+        },
         body: JSON.stringify({ email: values.email, password: values.password }),
       });
 
       const payload = await response.json();
 
       if (!response.ok) {
-        // Use the unified error shape: { error: { message } }
-        setErrorMessage(payload?.error?.message ?? "Login failed. Please try again.");
+        setErrorMessage(payload?.error?.message ?? 'Login failed. Please try again.');
         return;
       }
 
-      const tokens = payload?.data?.tokens;
-      if (!tokens?.accessToken) {
-        setErrorMessage("Login succeeded but no access token was returned.");
+      const user = payload?.data?.user;
+      if (!user) {
+        setErrorMessage('Login succeeded but no user data was returned.');
         return;
       }
 
-      // Persist session (localStorage + httpOnly cookie)
-      await persistSession(tokens.accessToken, tokens.refreshToken, payload?.data?.user);
-
-      // Read optional callbackUrl from query params
       const params = new URLSearchParams(window.location.search);
-      const callbackUrl = params.get("callbackUrl") ?? "/dashboard";
+      const callbackUrl = params.get('callbackUrl') ?? '/dashboard';
       router.push(callbackUrl);
     } catch {
-      setErrorMessage("Unable to complete login. Please check your connection.");
+      setErrorMessage('Unable to complete login. Please check your connection.');
     } finally {
       setIsSubmitting(false);
     }

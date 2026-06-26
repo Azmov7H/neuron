@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+import './globals.css';
+import { CsrfFetchProvider } from '@/components/security/csrf-fetch-provider';
 
 export const metadata: Metadata = {
   title: {
@@ -82,7 +83,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased dark">
       <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
-            <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <CsrfFetchProvider />
+        {children}
+      </body>
     </html>
   );
 }

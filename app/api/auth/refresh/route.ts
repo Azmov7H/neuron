@@ -1,35 +1,33 @@
 /**
  * POST /api/auth/refresh
- * Rotate access token using a valid refresh token
+ * Rotate authentication cookies using a valid refresh token cookie.
  */
 
 import { NextRequest } from 'next/server';
-import { ZodError } from 'zod';
 
 import { connectDB } from '@/database/connection';
 import { AuthService } from '@/modules/auth/auth.service';
-import { ApiResponseHandler, zodValidationError } from '@/lib/utils/response';
-import { RefreshTokenSchema } from '@/validations/schemas';
+import { ApiResponseHandler } from '@/lib/utils/response';
 import { withErrorHandling } from '@/middleware/auth';
+import { requireCsrfProtection } from '@/lib/security/csrf';
+import { REFRESH_COOKIE_NAME, setAuthCookies } from '@/lib/auth/cookies';
 
 async function handler(request: NextRequest) {
   await connectDB();
 
-  const body: unknown = await request.json();
-
-  let refreshToken: string;
-  try {
-    ({ refreshToken } = RefreshTokenSchema.parse(body));
-  } catch (error) {
-    if (error instanceof ZodError) {
-      return zodValidationError(error);
-    }
-    throw error;
+  const refreshToken = request.cookies.get(REFRESH_COOKIE_NAME)?.value;
+  if (!refreshToken) {
+    return ApiResponseHandler.unauthorized('Refresh token cookie missing');
   }
 
   const tokens = await AuthService.refreshToken(refreshToken);
+  const response = ApiResponseHandler.success(
+    { expiresIn: tokens.expiresIn },
+    'Token refreshed successfully'
+  );
 
-  return ApiResponseHandler.success(tokens, 'Token refreshed successfully');
+  setAuthCookies(response, tokens.accessToken, tokens.refreshToken);
+  return response;
 }
 
-export const POST = withErrorHandling(handler);
+export const POST = withErrorHandling(requireCsrfProtection(handler));

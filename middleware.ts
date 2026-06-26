@@ -10,38 +10,50 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-const COOKIE_NAME = 'neuron_session';
+const ACCESS_COOKIE_NAME = 'neuron_session';
 const LOGIN_PATH = '/auth/login';
+const CSRF_COOKIE_NAME = 'neuron_csrf';
+const CSRF_HEADER_NAME = 'x-csrf-token';
+const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
 
 export function middleware(request: NextRequest): NextResponse {
   const { pathname } = request.nextUrl;
 
-  // Allow auth API routes to pass through (they set/clear the cookie)
+  // Allow auth API routes to pass through. Authentication and CSRF protection
+  // are handled by route-level wrappers for /api/auth.
   if (pathname.startsWith('/api/auth')) {
     return NextResponse.next();
   }
 
-  const token = request.cookies.get(COOKIE_NAME)?.value;
+  if (pathname.startsWith('/api/') && !SAFE_METHODS.includes(request.method)) {
+    const csrfCookie = request.cookies.get(CSRF_COOKIE_NAME)?.value;
+    const csrfHeader = request.headers.get(CSRF_HEADER_NAME);
+
+    if (!csrfCookie || !csrfHeader || csrfCookie !== csrfHeader) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: { message: 'Invalid CSRF token' },
+          statusCode: 403,
+        },
+        { status: 403 }
+      );
+    }
+  }
+
+  const token = request.cookies.get(ACCESS_COOKIE_NAME)?.value;
 
   if (!token) {
-    // Preserve the intended destination for post-login redirect
     const loginUrl = request.nextUrl.clone();
     loginUrl.pathname = LOGIN_PATH;
     loginUrl.searchParams.set('callbackUrl', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
-  // Token exists — allow the request through.
-  // Full JWT verification is done in requireAuth middleware for API routes.
-  // For page routes, the dashboard components call APIs that enforce auth.
   return NextResponse.next();
 }
 
 export const config = {
-  // Protect all routes except explicitly public ones.
-  // Next.js matcher supports glob patterns; we match any path that does not start with
-  // the following prefixes: /auth, /api/auth, /_next, /favicon.ico, and the root marketing page.
-  // This ensures dashboard, settings, and any future platform routes are secured.
   matcher: [
     '/((?!auth|api/auth|_next|favicon.ico).*)',
   ],
