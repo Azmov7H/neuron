@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server';
 import { connectDB } from '@/database/connection';
 import { getAuthContext, withErrorHandling, requireAuth } from '@/middleware/auth';
 import { ApiResponseHandler } from '@/lib/utils/response';
+import { logger } from '@/lib/logger';
 import { SparkContext } from '@/modules/spark/spark.context';
 import { AppError } from '@/types';
 
@@ -30,10 +31,11 @@ async function handler(request: NextRequest) {
     });
     
     return ApiResponseHandler.success(context);
-  } catch (err: any) {
-    console.error('[Spark Context API] Error aggregating context:', err);
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    logger.error('[Spark Context API] Error aggregating context:', error);
     return ApiResponseHandler.error(
-      new AppError(500, err.message || 'Failed to aggregate active context', 'CONTEXT_AGGREGATION_ERROR')
+      new AppError(500, error.message || 'Failed to aggregate active context', 'CONTEXT_AGGREGATION_ERROR')
     );
   }
 }

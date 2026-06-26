@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { connectDB } from '@/database/connection';
 import { getAuthContext, withErrorHandling, requireAuth } from '@/middleware/auth';
 import { ApiResponseHandler } from '@/lib/utils/response';
+import { logger } from '@/lib/logger';
 import { SimulationRun } from '@/database/models/simulation-run';
 import mongoose from 'mongoose';
 
@@ -19,7 +20,7 @@ async function handler(request: NextRequest) {
     const simulationId = searchParams.get('simulationId');
     const limit = parseInt(searchParams.get('limit') || '15', 10);
 
-    const query: Record<string, any> = {
+    const query: Record<string, unknown> = {
       userId: new mongoose.Types.ObjectId(auth.userId)
     };
 
@@ -36,8 +37,8 @@ async function handler(request: NextRequest) {
       .lean();
 
     return ApiResponseHandler.success(history);
-  } catch (err: any) {
-    console.error('[Simulation History API] Fetch failed:', err);
+  } catch (err: unknown) {
+    logger.error('[Simulation History API] Fetch failed:', err);
     return ApiResponseHandler.internalError('Failed to retrieve simulation history.');
   }
 }

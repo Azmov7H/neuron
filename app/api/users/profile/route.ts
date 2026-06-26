@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server';
 import { connectDB } from '@/database/connection';
 import { requireAuth, getAuthContext, withErrorHandling } from '@/middleware/auth';
 import { ApiResponseHandler } from '@/lib/utils/response';
+import { logger } from '@/lib/logger';
 import { User } from '@/database/models/user';
 import { SimulationRun } from '@/database/models/simulation-run';
 import { SparkSession } from '@/database/models/spark-session';
@@ -43,9 +44,13 @@ async function handler(request: NextRequest) {
     .lean();
 
   // Get user progress and associated neural paths to show actual progress
-  const pathProgresses = await UserProgress.find({ userId: auth.userId }).lean();
-  const pathIds = pathProgresses.map((p) => p.pathId);
-  const paths = await NeuralPath.find({ _id: { $in: pathIds } } as any).lean();
+  const pathProgresses = await UserProgress.find({ userId: auth.userId })
+    .lean<{ pathId: string; overallCompletion?: number }[]>();
+  const pathIds = pathProgresses.map((p) => p.pathId).filter(Boolean);
+  const paths = await NeuralPath.find()
+    .where('_id')
+    .in(pathIds)
+    .lean<{ _id: { toString(): string }; title?: string }[]>();
   
   const neuralPathsProgress = pathProgresses.map((p) => {
     const path = paths.find((pathObj) => pathObj._id.toString() === p.pathId.toString());
@@ -77,7 +82,7 @@ async function handler(request: NextRequest) {
         .limit(5)
         .lean();
     } catch (e) {
-      console.error('Failed to generate recommendations in profile:', e);
+      logger.warn('Failed to generate recommendations in profile:', e);
     }
   }
 

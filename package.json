@@ -26,6 +26,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.75.0",
+    "redis": "^6.0.1",
     "shadcn": "^4.7.0",
     "tailwind-merge": "^3.5.0",
     "three": "^0.184.0",

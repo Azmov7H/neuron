@@ -4,6 +4,7 @@
  */
 
 import { AppError } from '@/types';
+import { logger } from '@/lib/logger';
 
 /**
  * Handle and log errors consistently
@@ -12,13 +13,15 @@ export function handleError(error: unknown, context?: string): AppError {
   const prefix = context ? `[${context}]` : '[Error]';
 
   if (error instanceof AppError) {
-    console.error(`${prefix} ${error.statusCode}: ${error.message}`);
+    logger.warn(`${prefix} ${error.statusCode}: ${error.message}`);
     return error;
   }
 
   if (error instanceof Error) {
-    console.error(`${prefix} ${error.name}: ${error.message}`);
-    console.error(error.stack);
+    logger.error(`${prefix} ${error.name}: ${error.message}`);
+    if (process.env.NODE_ENV !== 'production') {
+      logger.debug(error.stack ?? 'No stack available');
+    }
 
     // Map common errors to AppError
     if (error.message.includes('ENOENT')) {
@@ -40,7 +43,7 @@ export function handleError(error: unknown, context?: string): AppError {
   }
 
   const message = String(error);
-  console.error(`${prefix} Unknown error: ${message}`);
+  logger.error(`${prefix} Unknown error: ${message}`);
   return new AppError(500, 'An unknown error occurred', 'INTERNAL_ERROR');
 }
 
@@ -48,10 +51,12 @@ export function handleError(error: unknown, context?: string): AppError {
  * Validate required fields in object
  */
 export function validateRequired(
-  obj: Record<string, any>,
+  obj: Record<string, unknown>,
   fields: string[]
 ): { valid: boolean; missing: string[] } {
-  const missing = fields.filter((field) => !obj[field]);
+  const missing = fields.filter(
+    (field) => obj[field] === undefined || obj[field] === null || obj[field] === ''
+  );
 
   return {
     valid: missing.length === 0,
@@ -85,10 +90,7 @@ export async function retryAsync<T>(
       return await fn();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      console.warn(
-        `[Retry] Attempt ${attempt}/${maxRetries} failed:`,
-        lastError.message
-      );
+      logger.warn(`[Retry] Attempt ${attempt}/${maxRetries} failed:`, lastError.message);
 
       if (attempt < maxRetries) {
         await new Promise((resolve) => setTimeout(resolve, delayMs * attempt));
@@ -102,7 +104,7 @@ export async function retryAsync<T>(
 /**
  * Normalize error response for API
  */
-export function normalizeErrorResponse(error: any) {
+export function normalizeErrorResponse(error: unknown) {
   if (error instanceof AppError) {
     return {
       statusCode: error.statusCode,

@@ -69,11 +69,23 @@ export const config = {
     },
   },
 
+  // Rate limiting
+  rateLimit: {
+    maxRequests: parseInt(getEnv('RATE_LIMIT_MAX_REQUESTS', '100')),
+    windowMs: parseInt(getEnv('RATE_LIMIT_WINDOW_MS', '60000')),
+  },
+
   // Features
   features: {
     enableSparkAI: getEnv('ENABLE_SPARK_AI', 'true') === 'true',
     enableRecommendations: getEnv('ENABLE_RECOMMENDATIONS', 'true') === 'true',
     enableAnalytics: getEnv('ENABLE_ANALYTICS', 'true') === 'true',
+  },
+
+  // Monitoring
+  monitoring: {
+    sentryDsn: process.env.SENTRY_DSN ?? '',
+    enableOpenTelemetry: getEnv('ENABLE_OPENTELEMETRY', 'false') === 'true',
   },
 };
 

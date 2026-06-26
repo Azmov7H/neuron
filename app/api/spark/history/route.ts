@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server';
 import { connectDB } from '@/database/connection';
 import { getAuthContext, withErrorHandling, requireAuth } from '@/middleware/auth';
 import { ApiResponseHandler } from '@/lib/utils/response';
+import { logger } from '@/lib/logger';
 import { SparkService } from '@/modules/spark/spark.service';
 import { AppError } from '@/types';
 
@@ -28,10 +29,17 @@ async function handler(request: NextRequest) {
   try {
     const session = await SparkService.getSessionHistory(sessionId, auth.userId);
     return ApiResponseHandler.success(session);
-  } catch (err: any) {
-    console.error('[Spark History API] Error fetching history:', err);
+  } catch (err: unknown) {
+    const error = err instanceof Error ? err : new Error(String(err));
+    const errorLike = error as Error & { statusCode?: number; code?: string };
+
+    logger.error('[Spark History API] Error fetching history:', error);
     return ApiResponseHandler.error(
-      new AppError(err.statusCode || 500, err.message || 'Failed to fetch session history', err.code || 'SESSION_HISTORY_ERROR')
+      new AppError(
+        typeof errorLike.statusCode === 'number' ? errorLike.statusCode : 500,
+        errorLike.message || 'Failed to fetch session history',
+        typeof errorLike.code === 'string' ? errorLike.code : 'SESSION_HISTORY_ERROR'
+      )
     );
   }
 }

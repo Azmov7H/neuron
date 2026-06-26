@@ -15,6 +15,7 @@ import { SparkPrompt } from './spark.prompt';
 import { SparkResponseFormatter } from './spark.responseFormatter';
 import { SparkFallback } from './spark.fallback';
 import { AppError } from '@/types';
+import { logger } from '@/lib/logger';
 import { Types } from 'mongoose';
 
 export class SparkService {
@@ -254,7 +255,7 @@ export class SparkService {
           });
         }
       } catch (err) {
-        console.error('[Spark Service] Error creating discovery:', err);
+        logger.error('[Spark Service] Error creating discovery:', err);
       }
     }
 
@@ -272,7 +273,7 @@ export class SparkService {
       addedXp = evoResult.addedXp;
       isRankUp = evoResult.isRankUp;
     } catch (err) {
-      console.error('[Spark Service] Error adding XP:', err);
+      logger.error('[Spark Service] Error adding XP:', err);
     }
 
     return {
