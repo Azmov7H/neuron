@@ -4,6 +4,7 @@
  */
 
 import { Knowledge, IKnowledgeDocument } from '@/database/models/knowledge';
+import { logger } from '@/lib/logger';
 
 // Basic list of English stopwords to clean user messages before searching
 const STOPWORDS = new Set([
@@ -114,7 +115,7 @@ export class SparkRetrieval {
 
       return results;
     } catch (error) {
-      console.error('[Spark Retrieval] Error retrieving knowledge chunks:', error);
+      logger.error('[Spark Retrieval] Error retrieving knowledge chunks:', error);
       return [];
     }
   }

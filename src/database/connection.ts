@@ -5,8 +5,7 @@
 
 import mongoose, { Connection } from 'mongoose';
 import { config } from '@/config/env';
-
-let cachedConnection: Connection | null = null;
+import { logger } from '@/lib/logger';
 
 interface MongoDB {
   conn: Connection | null;
@@ -20,7 +19,7 @@ const mongodb: MongoDB = {
 
 export async function connectDB(): Promise<Connection> {
   if (mongodb.conn) {
-    console.log('Using cached database connection');
+    logger.debug('Using cached database connection');
     return mongodb.conn;
   }
 
@@ -40,9 +39,7 @@ async function connectWithRetry(
 
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      console.log(
-        `[DB] Connection attempt ${attempt}/${retries} to ${mongoConfig.uri}`
-      );
+      logger.info(`[DB] Connection attempt ${attempt}/${retries} to ${mongoConfig.uri}`);
 
       const conn = await mongoose.connect(mongoConfig.uri, {
         dbName: mongoConfig.dbName,
@@ -55,21 +52,21 @@ async function connectWithRetry(
         w: 'majority',
       });
 
-      console.log('[DB] ✓ Successfully connected to MongoDB');
+      logger.info('[DB] ✓ Successfully connected to MongoDB');
 
       // Setup connection event listeners
       conn.connection.on('disconnected', () => {
-        console.warn('[DB] Connection disconnected');
+        logger.warn('[DB] Connection disconnected');
       });
 
       conn.connection.on('error', (error) => {
-        console.error('[DB] Connection error:', error.message);
+        logger.error('[DB] Connection error:', error.message);
       });
 
       return conn.connection;
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[DB] Connection attempt ${attempt} failed:`, message);
+      logger.error(`[DB] Connection attempt ${attempt} failed:`, message);
 
       if (attempt === retries) {
         throw new Error(
@@ -90,7 +87,7 @@ export async function disconnectDB(): Promise<void> {
     await mongoose.disconnect();
     mongodb.conn = null;
     mongodb.promise = null;
-    console.log('[DB] Disconnected from MongoDB');
+    logger.info('[DB] Disconnected from MongoDB');
   }
 }
 

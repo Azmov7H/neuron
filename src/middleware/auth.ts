@@ -8,6 +8,8 @@ import { verifyAccessToken, extractTokenFromHeader } from '@/lib/auth/jwt';
 import { RequestContext, AppError } from '@/types';
 import { ApiResponseHandler } from '@/lib/utils/response';
 import { config } from '@/config/env';
+import { logger } from '@/lib/logger';
+import { getRateLimitData } from '@/lib/redis/client';
 
 // ─────────────────────────────────────────────
 // Types
@@ -77,7 +79,7 @@ export function requireAuth(handler: RouteHandler): RouteHandler {
 
       return handler(request, context);
     } catch (error) {
-      console.error('[Auth] requireAuth error:', error);
+      logger.error('[Auth] requireAuth error:', error);
       return ApiResponseHandler.unauthorized('Invalid token');
     }
   };
@@ -90,20 +92,15 @@ export function requireAuth(handler: RouteHandler): RouteHandler {
 const rateLimitStore = new Map<string, { count: number; resetTime: number }>();
 
 /**
- * Basic in-memory rate limiter.
- * Automatically disabled in development to prevent false positives during debugging.
- *
- * @param handler  The route handler to wrap
- * @param limit    Max requests per window (default 100)
- * @param windowMs Window in ms (default 60 000 = 1 minute)
+ * Production-capable rate limiter backed by Redis with memory fallback.
+ * Uses IP or authenticated user ID as the request key.
  */
 export function withRateLimit(
   handler: RouteHandler,
-  limit = 100,
-  windowMs = 60_000
+  limit = config.rateLimit.maxRequests,
+  windowMs = config.rateLimit.windowMs
 ): RouteHandler {
   return async (request, context) => {
-    // Skip rate limiting in development — prevents confusion with shared IPs
     if (config.server.isDevelopment) {
       return handler(request, context);
     }
@@ -113,17 +110,39 @@ export function withRateLimit(
     const identifier =
       forwardedFor?.split(',')[0].trim() ?? realIp ?? 'anonymous';
 
+    const authHeader = request.headers.get('authorization');
+    const token = extractTokenFromHeader(authHeader) ?? request.cookies.get('neuron_session')?.value;
+    const userId = token ? verifyAccessToken(token)?.userId : null;
+    const rateKey = userId ? `user:${userId}` : `ip:${identifier}`;
+
+    try {
+      const data = await getRateLimitData(rateKey, limit, windowMs);
+      if (data) {
+        if (!data.allowed) {
+          logger.warn('[RateLimiter] Rate limit exceeded', { rateKey, limit, count: data.count });
+          return ApiResponseHandler.error(
+            new AppError(429, 'Too many requests. Please try again later.', 'RATE_LIMIT_EXCEEDED'),
+            429
+          );
+        }
+        return handler(request, context);
+      }
+    } catch (error) {
+      logger.warn('[RateLimiter] Redis rate limit failed, using local fallback', error);
+    }
+
     const now = Date.now();
-    let record = rateLimitStore.get(identifier);
+    let record = rateLimitStore.get(rateKey);
 
     if (!record || record.resetTime < now) {
       record = { count: 0, resetTime: now + windowMs };
-      rateLimitStore.set(identifier, record);
+      rateLimitStore.set(rateKey, record);
     }
 
     record.count++;
 
     if (record.count > limit) {
+      logger.warn('[RateLimiter] Local fallback rate limit exceeded', { rateKey, limit, count: record.count });
       return ApiResponseHandler.error(
         new AppError(429, 'Too many requests. Please try again later.', 'RATE_LIMIT_EXCEEDED'),
         429
@@ -148,7 +167,7 @@ export function withErrorHandling(handler: RouteHandler): RouteHandler {
     try {
       return await handler(request, context);
     } catch (error) {
-      console.error('[API] Unhandled error:', error);
+      logger.error('[API] Unhandled error', error);
 
       if (error instanceof AppError) {
         return ApiResponseHandler.error(error, error.statusCode);

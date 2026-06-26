@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { connectDB } from '@/database/connection';
 import { ApiResponseHandler } from '@/lib/utils/response';
+import { logger } from '@/lib/logger';
 import { SimulationConfig } from '@/database/models/simulation-config';
 
 // 48 Calibrated Simulation configurations (8 per domain)
@@ -538,21 +539,21 @@ const SEED_CONFIGS = [
   }
 ];
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     await connectDB();
 
     // Check if dynamic configurations are present. If empty, self-seed immediately.
     const count = await SimulationConfig.countDocuments();
     if (count === 0) {
-      console.log("[Simulation Config API] Seeding 48 simulation configs...");
+      logger.info('[Simulation Config API] Seeding 48 simulation configs...');
       await SimulationConfig.insertMany(SEED_CONFIGS);
     }
 
     const configs = await SimulationConfig.find({}).lean();
     return ApiResponseHandler.success(configs);
-  } catch (err: any) {
-    console.error("[Simulation Config API] Fetch failed:", err);
-    return ApiResponseHandler.internalError("Failed to retrieve simulation configurations.");
+  } catch (err: unknown) {
+    logger.error('[Simulation Config API] Fetch failed:', err);
+    return ApiResponseHandler.internalError('Failed to retrieve simulation configurations.');
   }
 }

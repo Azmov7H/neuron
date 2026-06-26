@@ -8,6 +8,7 @@ import { User } from '@/database/models/user';
 import { NeuralPath } from '@/database/models/neural-path';
 import { Knowledge } from '@/database/models/knowledge';
 import { Chapter } from '@/types';
+import { logger } from '@/lib/logger';
 
 /**
  * Seed database with sample data
@@ -17,7 +18,7 @@ export async function seedDatabase() {
   try {
     await connectDB();
 
-    console.log('[Seed] Starting database seeding...');
+    logger.info('[Seed] Starting database seeding...');
 
     // 1. Seed Knowledge Base (structured educational chunks)
     // Clear existing to ensure the schema updates (with relatedSimulations) are seeded properly
@@ -105,12 +106,12 @@ export async function seedDatabase() {
     ];
 
     await Knowledge.insertMany(sampleKnowledge);
-    console.log(`[Seed] Seeded ${sampleKnowledge.length} knowledge base concepts with simulations`);
+logger.info(`[Seed] Seeded ${sampleKnowledge.length} knowledge base concepts with simulations`);
 
     // 2. Check if user/paths data already exists
     const userCount = await User.countDocuments();
     if (userCount > 0) {
-      console.log('[Seed] User data already exists, skipping user and neural paths seed');
+      logger.info('[Seed] User data already exists, skipping user and neural paths seed');
       return;
     }
 
@@ -134,7 +135,7 @@ export async function seedDatabase() {
     ];
 
     const createdUsers = await User.insertMany(sampleUsers);
-    console.log(`[Seed] Created ${createdUsers.length} users`);
+logger.info(`[Seed] Created ${createdUsers.length} users`);
 
     // Create sample neural paths
     const chapters: Chapter[] = [
@@ -219,11 +220,11 @@ export async function seedDatabase() {
     ];
 
     const createdPaths = await NeuralPath.insertMany(samplePaths);
-    console.log(`[Seed] Created ${createdPaths.length} neural paths`);
+    logger.info(`[Seed] Created ${createdPaths.length} neural paths`);
 
-    console.log('[Seed] ✓ Database seeding completed successfully');
+    logger.info('[Seed] ✓ Database seeding completed successfully');
   } catch (error) {
-    console.error('[Seed] Error during seeding:', error);
+    logger.error('[Seed] Error during seeding:', error);
     throw error;
   }
 }
@@ -235,16 +236,16 @@ export async function clearDatabase() {
   try {
     await connectDB();
 
-    console.log('[Clear] Starting database clear...');
+    logger.info('[Clear] Starting database clear...');
 
     // Clear all collections
     await User.deleteMany({});
     await NeuralPath.deleteMany({});
     await Knowledge.deleteMany({});
 
-    console.log('[Clear] ✓ Database cleared');
+    logger.info('[Clear] ✓ Database cleared');
   } catch (error) {
-    console.error('[Clear] Error during clear:', error);
+    logger.error('[Clear] Error during clear:', error);
     throw error;
   }
 }

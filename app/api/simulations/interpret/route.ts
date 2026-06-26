@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/database/connection';
 import { getAuthContext, withErrorHandling, requireAuth } from '@/middleware/auth';
 import { ApiResponseHandler } from '@/lib/utils/response';
+import { logger } from '@/lib/logger';
 import { SimulationRun } from '@/database/models/simulation-run';
-import { AppError } from '@/types';
 import mongoose from 'mongoose';
 
 const MODEL_NAME = 'google/gemma-4-26b-a4b-it:free';
@@ -14,10 +14,14 @@ const PRIMARY_TIMEOUT_MS = 6000; // 6 seconds threshold
 function generateLocalSimulationFallback(
   domain: string,
   simulationId: string,
-  parameters: Record<string, any>,
-  stateSnapshot: Record<string, any>
+  parameters: Record<string, unknown>
 ): string {
-  const diff = parameters.speed > 0.8 || parameters.energyLevel > 4 || parameters.initialMass > 15 ? 'advanced' : 'intermediate';
+  const diff =
+    (typeof parameters.speed === 'number' && parameters.speed > 0.8) ||
+    (typeof parameters.energyLevel === 'number' && parameters.energyLevel > 4) ||
+    (typeof parameters.initialMass === 'number' && parameters.initialMass > 15)
+      ? 'advanced'
+      : 'intermediate';
   
   let explanation = '';
   let insights: string[] = [];
@@ -463,7 +467,7 @@ async function handler(request: NextRequest) {
             )
           );
         } catch (err) {
-          console.error('[Simulation API Stream] Failed to parse and save run details:', err);
+          logger.error('[Simulation API Stream] Failed to parse and save run details:', err);
         } finally {
           controller.close();
         }
@@ -472,10 +476,10 @@ async function handler(request: NextRequest) {
       const triggerLocalFallback = async (reason: string) => {
         if (fallbackTriggered) return;
         fallbackTriggered = true;
-        console.warn(`[Simulation API Stream] Fallback activated. Reason: ${reason}`);
+        logger.warn(`[Simulation API Stream] Fallback activated. Reason: ${reason}`);
 
         try {
-          const fallbackText = generateLocalSimulationFallback(domain, simulationId, parameters || {}, stateSnapshot || {});
+          const fallbackText = generateLocalSimulationFallback(domain, simulationId, parameters || {});
           
           // Stream word-by-word
           const words = fallbackText.split(' ');
@@ -488,7 +492,7 @@ async function handler(request: NextRequest) {
           }
           await finishAndPersist(accumulated);
         } catch (err) {
-          console.error('[Simulation API Stream] Extreme failover crash:', err);
+          logger.error('[Simulation API Stream] Extreme failover crash:', err);
           const absoluteFallback = `[EXPLANATION]\nScientific systems running normally. The deterministic engine is executing mathematical steps in the background.\n\n---\n\n[KEY INSIGHTS]\n- Dynamic state is fully active.\n\n---\n\n[CONCEPTS]\n- Simulation Engine\n\n---\n\n[RECOMMENDED ACTIONS]\n- Modify sliders to check physical results.\n\n---\n\n[METADATA]\n{\n  "domain": "${domain}",\n  "simulationType": "${simulationId}",\n  "difficulty": "intermediate",\n  "aiModel": "gemma-4-26b-a4b-it"\n}`;
           controller.enqueue(encoder.encode(absoluteFallback));
           await finishAndPersist(absoluteFallback);
@@ -631,10 +635,11 @@ Explain the current state clearly.
         }
 
         await finishAndPersist(fullResponseText);
-      } catch (err: any) {
+      } catch (err: unknown) {
         clearTimeout(timeoutId);
-        if (err.name === 'AbortError') return;
-        await triggerLocalFallback(`OpenRouter connection error: ${err.message}`);
+        const error = err instanceof Error ? err : new Error(String(err));
+        if (error.name === 'AbortError') return;
+        await triggerLocalFallback(`OpenRouter connection error: ${error.message}`);
       }
     }
   });

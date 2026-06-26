@@ -13,6 +13,8 @@ export interface SparkMetadata {
   sparkMode: 'scientific' | 'educational' | 'cinematic';
 }
 
+import { logger } from '@/lib/logger';
+
 export class SparkResponseFormatter {
   private static METADATA_START = '[METADATA]';
 
@@ -70,7 +72,7 @@ export class SparkResponseFormatter {
           sparkMode: parsed.sparkMode || 'educational'
         };
       } catch (err) {
-        console.error('[Spark Response Formatter] Failed to parse JSON metadata block:', err, jsonText);
+        logger.error('[Spark Response Formatter] Failed to parse JSON metadata block:', err, jsonText);
       }
     }
 

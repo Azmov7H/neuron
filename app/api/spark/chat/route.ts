@@ -11,12 +11,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { connectDB } from '@/database/connection';
 import { getAuthContext, withErrorHandling, requireAuth } from '@/middleware/auth';
 import { ApiResponseHandler } from '@/lib/utils/response';
+import { logger } from '@/lib/logger';
 import { SparkService } from '@/modules/spark/spark.service';
 import { AppError } from '@/types';
 
 const MODEL_NAME = process.env.OPENROUTER_MODEL || 'google/gemma-4-26b-a4b-it:free';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRIMARY_TIMEOUT_MS = 5500; // 5.5 seconds threshold
+
+type SparkChatRequestBody = {
+  content?: string;
+  domain?: string;
+  currentPathId?: string;
+  currentChapterId?: string;
+  sessionId?: string;
+  [key: string]: unknown;
+};
 
 async function handler(request: NextRequest) {
   const auth = getAuthContext(request);
@@ -26,15 +36,18 @@ async function handler(request: NextRequest) {
 
   await connectDB();
 
-  let body;
+  let body: SparkChatRequestBody;
   try {
-    body = await request.json();
+    body = (await request.json()) as SparkChatRequestBody;
   } catch {
     return ApiResponseHandler.badRequest('Invalid request body');
   }
 
-  const { content, domain, currentPathId, currentChapterId } = body;
-  let sessionId = body.sessionId;
+  const content = typeof body.content === 'string' ? body.content : undefined;
+  const domain = typeof body.domain === 'string' ? body.domain : undefined;
+  const currentPathId = typeof body.currentPathId === 'string' ? body.currentPathId : undefined;
+  const currentChapterId = typeof body.currentChapterId === 'string' ? body.currentChapterId : undefined;
+  let sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined;
 
   if (!content) {
     return ApiResponseHandler.badRequest('Message content is required');
@@ -50,19 +63,30 @@ async function handler(request: NextRequest) {
         currentChapterId
       });
       sessionId = session._id.toString();
-    } catch (err: any) {
-      console.error('[Spark API] Session creation failed:', err);
-      return ApiResponseHandler.error(new AppError(500, err.message || 'Session creation failed', 'SESSION_CREATION_FAILED'));
+    } catch (err: unknown) {
+      logger.error('[Spark API] Session creation failed:', err);
+      const error = err instanceof Error ? err : new Error('Unknown session creation error');
+      return ApiResponseHandler.error(new AppError(500, error.message || 'Session creation failed', 'SESSION_CREATION_FAILED'));
     }
   }
 
+  type SparkRequestParams = Awaited<ReturnType<typeof SparkService.prepareLLMRequest>>;
+
   // 2. Prepare LLM context parameter aggregation
-  let requestParams;
+  let requestParams: SparkRequestParams | undefined;
   try {
     requestParams = await SparkService.prepareLLMRequest(sessionId, auth.userId, content);
-  } catch (err: any) {
-    console.error('[Spark API] Preparing context parameters failed:', err);
-    return ApiResponseHandler.error(new AppError(err.statusCode || 500, err.message || 'Preparing context failed', err.code || 'CONTEXT_PREPARATION_FAILED'));
+  } catch (err: unknown) {
+    logger.error('[Spark API] Preparing context parameters failed:', err);
+    return ApiResponseHandler.error(
+      new AppError(500, 'Failed to prepare AI request context', 'LLM_PREPARATION_FAILED')
+    );
+  }
+
+  if (!requestParams) {
+    return ApiResponseHandler.error(
+      new AppError(500, 'AI request context was not prepared', 'LLM_PREPARATION_FAILED')
+    );
   }
 
   const { llmMessages, retrievedChunks } = requestParams;
@@ -95,8 +119,8 @@ async function handler(request: NextRequest) {
               })} [END]`
             )
           );
-        } catch (err) {
-          console.error('[Spark API Stream] Background post-processing failed:', err);
+        } catch (err: unknown) {
+          logger.error('[Spark API Stream] Background post-processing failed:', err);
         } finally {
           controller.close();
         }
@@ -105,7 +129,7 @@ async function handler(request: NextRequest) {
       const triggerLocalFallback = async (reason: string) => {
         if (fallbackTriggered) return;
         fallbackTriggered = true;
-        console.warn(`[Spark API Stream] Triggering fallback layer. Reason: ${reason}`);
+        logger.warn(`[Spark API Stream] Triggering fallback layer. Reason: ${reason}`);
 
         try {
           const fallbackText = await SparkService.generateLocalFallback(sessionId, auth.userId, content);
@@ -121,8 +145,8 @@ async function handler(request: NextRequest) {
           }
 
           await finishAndSave(currentText);
-        } catch (err) {
-          console.error('[Spark API Stream] Fallback generation crashed:', err);
+        } catch (err: unknown) {
+          logger.error('[Spark API Stream] Fallback generation crashed:', err);
           // Absolute failover: guarantee standard content to prevent blank pages
           const absoluteText = `**[Educational Stream Recalibrated]**\n\nI have successfully loaded a local cognitive route to process your question about **${content}**. Let's traverse key mechanisms.\n\nTo continue deep learning, verify your connections and retry exploring this concept in the simulations section.`;
           controller.enqueue(encoder.encode(absoluteText));
@@ -218,14 +242,15 @@ async function handler(request: NextRequest) {
         }
 
         await finishAndSave(fullContent);
-      } catch (err: any) {
+      } catch (err: unknown) {
         clearTimeout(timeoutId);
-        if (err.name === 'AbortError') {
+        const error = err instanceof Error ? err : new Error(String(err));
+        if (error.name === 'AbortError') {
           // Handled inside timeout callback
           return;
         }
         // Connection or status failures: recover with fallback
-        await triggerLocalFallback(`OpenRouter connection error: ${err.message}`);
+        await triggerLocalFallback(`OpenRouter connection error: ${error.message}`);
       }
     }
   });

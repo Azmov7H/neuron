@@ -6,9 +6,9 @@
 
 import { User } from '@/database/models/user';
 import { NeuralPath } from '@/database/models/neural-path';
-import { UserProgress } from '@/database/models/user-progress';
 import { Discovery } from '@/database/models/discovery';
 import { Types } from 'mongoose';
+import { logger } from '@/lib/logger';
 
 export interface LearningContext {
   student: {
@@ -94,7 +94,7 @@ export class SparkContext {
           }
         }
       } catch (err) {
-        console.error('[Spark Context] Error loading path/chapter details:', err);
+        logger.error('[Spark Context] Error loading path/chapter details:', err);
       }
     }
 
@@ -112,7 +112,7 @@ export class SparkContext {
 
       recentConcepts = discoveries.map(d => d.concept);
     } catch (err) {
-      console.error('[Spark Context] Error loading discovered concepts:', err);
+      logger.error('[Spark Context] Error loading discovered concepts:', err);
     }
 
     // 4. Build aggregated context payload

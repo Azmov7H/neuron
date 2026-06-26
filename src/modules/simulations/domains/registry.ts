@@ -3,6 +3,7 @@
  */
 
 import { ISimulationPlugin } from '../types';
+import { logger } from '@/lib/logger';
 
 export class SimulationPluginRegistry {
   private static instance: SimulationPluginRegistry | null = null;
@@ -22,7 +23,7 @@ export class SimulationPluginRegistry {
    */
   public register(plugin: ISimulationPlugin) {
     if (this.plugins.has(plugin.id)) {
-      console.warn(`[SimulationRegistry] Overwriting plugin with ID "${plugin.id}"`);
+      logger.warn(`[SimulationRegistry] Overwriting plugin with ID "${plugin.id}"`);
     }
     this.plugins.set(plugin.id, plugin);
   }

@@ -3,6 +3,7 @@
  */
 
 import { ISimulationPlugin, SimulationState, SimulationLifecycleEvent, SimulationEventCallback } from '../types';
+import { logger } from '@/lib/logger';
 
 export class SimulationEngine {
   private plugin: ISimulationPlugin;
@@ -123,7 +124,7 @@ export class SimulationEngine {
       try {
         callback(event, this.state);
       } catch (err) {
-        console.error(`[SimulationEngine] Callback error in event "${event}":`, err);
+        logger.error(`[SimulationEngine] Callback error in event "${event}":`, err);
       }
     }
   }

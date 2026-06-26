@@ -4,6 +4,7 @@
  */
 
 import { config } from '@/config/env';
+import { logger } from '@/lib/logger';
 
 export interface AIMessage {
   role: 'user' | 'assistant' | 'system';
@@ -47,7 +48,7 @@ export class LLMService {
     options: AIGenerationOptions = {}
   ): Promise<string> {
     if (!config.ai.openaiApiKey) {
-      console.warn('[LLM] OpenAI key not configured, using placeholder');
+      logger.warn('[LLM] OpenAI key not configured, using placeholder');
       return 'This is where the AI response would go.';
     }
 
@@ -76,9 +77,9 @@ export class LLMService {
   /**
    * Generate embeddings for semantic search
    */
-  static async generateEmbedding(text: string): Promise<number[]> {
+  static async generateEmbedding(_text: string): Promise<number[]> {
     if (!config.ai.openaiApiKey) {
-      console.warn('[LLM] OpenAI key not configured, returning zero vector');
+      logger.warn('[LLM] OpenAI key not configured, returning zero vector');
       return new Array(1536).fill(0); // Default OpenAI embedding dimension
     }
 
@@ -142,23 +143,23 @@ export class LLMService {
  */
 export function cacheAIResult(ttl: number = 3600) {
   return function (
-    target: any,
+    target: object,
     propertyKey: string,
     descriptor: PropertyDescriptor
   ) {
     const originalMethod = descriptor.value;
-    const cache = new Map<string, { result: any; expiry: number }>();
+    const cache = new Map<string, { result: unknown; expiry: number }>();
 
-    descriptor.value = async function (...args: any[]) {
+    descriptor.value = async function (...args: unknown[]) {
       const cacheKey = JSON.stringify(args);
       const cached = cache.get(cacheKey);
 
       if (cached && cached.expiry > Date.now()) {
-        console.log(`[Cache] Hit for ${propertyKey}`);
+        logger.debug(`[Cache] Hit for ${propertyKey}`);
         return cached.result;
       }
 
-      console.log(`[Cache] Miss for ${propertyKey}`);
+      logger.debug(`[Cache] Miss for ${propertyKey}`);
       const result = await originalMethod.apply(this, args);
 
       cache.set(cacheKey, {
