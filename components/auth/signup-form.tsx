@@ -62,6 +62,22 @@ const formSchema = z
 
 type FormValues = z.infer<typeof formSchema>;
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function fetchCsrfToken() {
+  const response = await fetch('/api/auth/csrf');
+  if (!response.ok) {
+    throw new Error('Unable to obtain CSRF token');
+  }
+
+  const payload = await response.json();
+  return payload?.data?.csrfToken as string | undefined;
+}
+
+function getCsrfHeader(csrfToken: string | undefined): Record<string, string> {
+  return csrfToken ? { 'x-csrf-token': csrfToken } : {};
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function SignupForm() {
@@ -69,6 +85,8 @@ export function SignupForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
 
+  // Allow `any` here to accommodate resolver type differences between
+  // `@hookform/resolvers` and `zod` minor-version typings.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema as any),
@@ -96,9 +114,14 @@ export function SignupForm() {
         preferredDomain: values.path,
       };
 
-      const res = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const csrfToken = await fetchCsrfToken();
+
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getCsrfHeader(csrfToken),
+        },
         body: JSON.stringify(payload),
       });
 
@@ -106,7 +129,7 @@ export function SignupForm() {
 
       if (!res.ok) {
         // Unified error shape: { error: { message, fields? } }
-        const errMsg = data?.error?.message ?? "Registration failed.";
+        const errMsg = data?.error?.message ?? 'Registration failed.';
         const fields = data?.error?.fields as Record<string, string[]> | undefined;
 
         // Map server-side field errors back into react-hook-form
@@ -114,7 +137,7 @@ export function SignupForm() {
           (Object.keys(fields) as Array<keyof FormValues>).forEach((field) => {
             if (field in form.getValues()) {
               form.setError(field as keyof FormValues, {
-                type: "server",
+                type: 'server',
                 message: fields[field as string][0],
               });
             }

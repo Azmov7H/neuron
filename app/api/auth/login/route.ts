@@ -1,6 +1,6 @@
 /**
  * POST /api/auth/login
- * Authenticate a user and return a token pair
+ * Authenticate a user and establish secure auth cookies.
  */
 
 import { NextRequest } from 'next/server';
@@ -11,6 +11,8 @@ import { AuthService } from '@/modules/auth/auth.service';
 import { ApiResponseHandler, zodValidationError } from '@/lib/utils/response';
 import { LoginSchema } from '@/validations/schemas';
 import { withErrorHandling, withRateLimit } from '@/middleware/auth';
+import { requireCsrfProtection } from '@/lib/security/csrf';
+import { setAuthCookies } from '@/lib/auth/cookies';
 
 async function handler(request: NextRequest) {
   await connectDB();
@@ -29,9 +31,15 @@ async function handler(request: NextRequest) {
 
   const result = await AuthService.login(validatedData);
 
-  return ApiResponseHandler.success(result, 'Login successful');
+  const response = ApiResponseHandler.success(
+    { user: result.user },
+    'Login successful'
+  );
+
+  setAuthCookies(response, result.tokens.accessToken, result.tokens.refreshToken);
+  return response;
 }
 
 export const POST = withErrorHandling(
-  withRateLimit(handler, 10, 3_600_000) // 10 login attempts per hour per IP (production only)
+  withRateLimit(requireCsrfProtection(handler), 10, 3_600_000) // 10 login attempts per hour per IP (production only)
 );

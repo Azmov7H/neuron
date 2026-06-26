@@ -57,24 +57,34 @@ const navSections = [
   },
 ];
 
+async function fetchCsrfToken() {
+  const response = await fetch('/api/auth/csrf');
+  if (!response.ok) {
+    throw new Error('Unable to obtain CSRF token');
+  }
+
+  const payload = await response.json();
+  return payload?.data?.csrfToken as string | undefined;
+}
+
+function getCsrfHeader(csrfToken: string | undefined): Record<string, string> {
+  return csrfToken ? { 'x-csrf-token': csrfToken } : {};
+}
+
 export function SideNav() {
   const pathname = usePathname();
   const router = useRouter();
 
   const handleLogout = async () => {
     try {
-      // Clear localStorage
-      localStorage.removeItem("neuronAccessToken");
-      localStorage.removeItem("neuronRefreshToken");
-      localStorage.removeItem("neuronUser");
-
-      // Clear the httpOnly session cookie
-      await fetch("/api/auth/session", { method: "DELETE" });
-
-      // Redirect to login
-      router.push("/auth/login");
+      const csrfToken = await fetchCsrfToken();
+      await fetch('/api/auth/session', {
+        method: 'DELETE',
+        headers: getCsrfHeader(csrfToken),
+      });
+      router.push('/auth/login');
     } catch (err) {
-      console.error("Failed to logout:", err);
+      console.error('Failed to logout:', err);
     }
   };
 

@@ -1,24 +1,10 @@
 "use client";
 
 import { Search, Bell, Settings, Command } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 export function TopBar() {
-  const [initials, setInitials] = useState("U");
-
-  useEffect(() => {
-    try {
-      const userStr = localStorage.getItem("neuronUser");
-      if (userStr) {
-        const user = JSON.parse(userStr);
-        if (user.username) {
-          setInitials(user.username.charAt(0).toUpperCase());
-        }
-      }
-    } catch {
-      // Ignore errors parsing localstorage
-    }
-  }, []);
+  const [initials] = useState('U');
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between px-6 lg:px-8 bg-card/50 backdrop-blur-xl border-b border-white/5">
