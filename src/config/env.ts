@@ -86,6 +86,7 @@ export const config = {
   monitoring: {
     sentryDsn: process.env.SENTRY_DSN ?? '',
     enableOpenTelemetry: getEnv('ENABLE_OPENTELEMETRY', 'false') === 'true',
+    slowQueryMs: parseInt(getEnv('MONITORING_SLOW_QUERY_MS', '100')),
   },
 };
 

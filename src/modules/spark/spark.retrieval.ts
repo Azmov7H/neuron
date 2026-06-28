@@ -5,6 +5,8 @@
 
 import { Knowledge, IKnowledgeDocument } from '@/database/models/knowledge';
 import { logger } from '@/lib/logger';
+import { cache, cacheKey } from '@/cache';
+import { config } from '@/config/env';
 
 // Basic list of English stopwords to clean user messages before searching
 const STOPWORDS = new Set([
@@ -68,12 +70,22 @@ export class SparkRetrieval {
     
     if (keywords.length === 0) {
       // Fallback: If no keywords could be extracted, return trending/top domain chunks
-      const query: any = {};
+      const query: Record<string, unknown> = {};
       if (domain) query.domain = domain.toLowerCase();
       
-      return await Knowledge.find(query)
+      const key = cacheKey('knowledge', domain || 'any', 'top', limit);
+      const cached = await cache.get<IKnowledgeDocument[]>(key);
+      if (cached) return cached;
+
+      const start = Date.now();
+      const docs = await Knowledge.find(query)
         .limit(limit)
         .lean() as unknown as IKnowledgeDocument[];
+      const elapsed = Date.now() - start;
+      if (elapsed > config.monitoring.slowQueryMs) logger.warn(`[DB] Slow query Knowledge.find top: ${elapsed}ms`);
+
+      await cache.set(key, docs, config.cache.ttl.paths || 300);
+      return docs;
     }
 
     // Build compound query matches
@@ -88,7 +100,7 @@ export class SparkRetrieval {
       ]
     }));
 
-    const query: any = { $or: regexQueries };
+    const query: Record<string, unknown> = { $or: regexQueries };
     
     // Filter by active domain if provided to guarantee contextual alignment
     if (domain) {
@@ -96,16 +108,24 @@ export class SparkRetrieval {
     }
 
     try {
+      const key = cacheKey('knowledge', domain || 'any', keywords.join(','));
+      const cached = await cache.get<IKnowledgeDocument[]>(key);
+      if (cached) return cached;
+
+      const start = Date.now();
       let results = await Knowledge.find(query)
         .limit(limit)
         .lean() as unknown as IKnowledgeDocument[];
+      const elapsed = Date.now() - start;
+      if (elapsed > config.monitoring.slowQueryMs) logger.warn(`[DB] Slow query Knowledge.find search: ${elapsed}ms`);
 
       // If search returns fewer than requested items and domain is specified,
       // fall back to getting general knowledge within the domain (broaden search)
       if (results.length < limit && domain) {
+        const existingIds = results.map(r => String((r as unknown as { _id: unknown })._id));
         const additionalQuery = {
           domain: domain.toLowerCase(),
-          _id: { $not: { $in: results.map(r => r._id) } }
+          _id: { $not: { $in: existingIds } }
         };
         const fallbacks = await Knowledge.find(additionalQuery)
           .limit(limit - results.length)
@@ -113,6 +133,7 @@ export class SparkRetrieval {
         results = [...results, ...fallbacks];
       }
 
+      await cache.set(key, results, config.cache.ttl.paths || 300);
       return results;
     } catch (error) {
       logger.error('[Spark Retrieval] Error retrieving knowledge chunks:', error);
