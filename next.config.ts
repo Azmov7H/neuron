@@ -1,16 +1,21 @@
 import type { NextConfig } from 'next';
 
+const isDev = process.env.NODE_ENV === 'development';
+
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self'",
+  isDev
+    ? "script-src 'self' 'unsafe-inline' 'unsafe-eval'"
+    : "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: https://lh3.googleusercontent.com https://picsum.photos",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  isDev
+    ? "connect-src 'self' ws: wss:"
+    : "connect-src 'self'",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
-  'block-all-mixed-content',
 ].join('; ');
 
 const nextConfig: NextConfig = {
