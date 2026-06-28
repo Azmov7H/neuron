@@ -3,6 +3,7 @@
  * Learning path management and curriculum design
  */
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NeuralPath } from '@/database/models/neural-path';
 import { UserProgress } from '@/database/models/user-progress';
 import { User } from '@/database/models/user';
@@ -267,7 +268,7 @@ export class NeuralPathsService {
     // Calculate overall completion
     const chapterValues = Array.from(progress.chapterProgress.values());
     progress.overallCompletion = Math.round(
-      chapterValues.reduce((a, b) => a + b, 0) / chapterValues.length
+      chapterValues.reduce((a: number, b: number) => a + b, 0) / chapterValues.length
     );
 
     // Mark as completed if 100%
@@ -284,82 +285,90 @@ export class NeuralPathsService {
    * Complete a chapter, update progress, and reward XP
    */
   static async completeChapter(userId: string, pathId: string, chapterId: string) {
-    try {
-      const path = await NeuralPath.findById(pathId);
-      if (!path) throw new AppError(404, 'Path not found');
+    const path = await NeuralPath.findById(pathId);
+    if (!path) throw new AppError(404, 'Path not found');
 
-      const chapterIndex = path.chapters.findIndex((c: any) => c.id === chapterId);
-      if (chapterIndex === -1) throw new AppError(404, 'Chapter not found');
+    const chapterIndex = path.chapters.findIndex((c: any) => c.id === chapterId);
+    if (chapterIndex === -1) throw new AppError(404, 'Chapter not found');
 
-      let progress: any = await UserProgress.findOne({ userId, pathId: path._id });
-      
-      const chapter = path.chapters[chapterIndex];
-      const totalDuration = path.chapters.reduce((sum: number, ch: any) => sum + ch.duration, 0);
-      const chapterXPReward = Math.floor((chapter.duration / totalDuration) * path.xpReward);
+    let progress: any = await UserProgress.findOne({ userId, pathId: path._id });
 
-      if (!progress) {
-        progress = new UserProgress({
-          userId,
-          pathId: path._id,
-          currentChapterId: chapterId,
-          chapterProgress: new Map(),
-          overallCompletion: 0,
-          xpEarned: 0,
-          timeSpent: 0
-        });
-      }
+    const chapter = path.chapters[chapterIndex];
+    const totalDuration = path.chapters.reduce((sum: number, ch: any) => sum + ch.duration, 0);
+    const chapterXPReward = Math.floor((chapter.duration / totalDuration) * path.xpReward);
 
-      const chapterProgressMap = progress.chapterProgress instanceof Map 
-        ? progress.chapterProgress 
-        : new Map(Object.entries(progress.chapterProgress || {}));
-
-      if (chapterProgressMap.get(chapterId) === 100) {
-        return { message: 'Chapter already completed', progress };
-      }
-
-      chapterProgressMap.set(chapterId, 100);
-      progress.chapterProgress = chapterProgressMap;
-      progress.xpEarned += chapterXPReward;
-
-      let completedChapters = 0;
-      path.chapters.forEach((ch: any) => {
-        if (chapterProgressMap.get(ch.id) === 100) completedChapters++;
+    if (!progress) {
+      progress = new UserProgress({
+        userId,
+        pathId: path._id,
+        currentChapterId: chapterId,
+        chapterProgress: new Map(),
+        overallCompletion: 0,
+        xpEarned: 0,
+        timeSpent: 0
       });
-      progress.overallCompletion = Math.floor((completedChapters / path.chapters.length) * 100);
+    }
 
-      if (chapterIndex + 1 < path.chapters.length) {
-        progress.currentChapterId = path.chapters[chapterIndex + 1].id;
-      }
+    const chapterProgressMap = progress.chapterProgress instanceof Map 
+      ? progress.chapterProgress 
+      : new Map(Object.entries(progress.chapterProgress || {}));
 
-      if (progress.overallCompletion === 100) {
-        progress.completedAt = new Date();
-      }
+    if (chapterProgressMap.get(chapterId) === 100) {
+      return { message: 'Chapter already completed', progress };
+    }
 
-      await progress.save();
+    chapterProgressMap.set(chapterId, 100);
+    progress.chapterProgress = chapterProgressMap;
+    progress.xpEarned += chapterXPReward;
 
-      const user: any = await User.findById(userId);
+    let completedChapters = 0;
+    path.chapters.forEach((ch: any) => {
+      if (chapterProgressMap.get(ch.id) === 100) completedChapters++;
+    });
+    progress.overallCompletion = Math.floor((completedChapters / path.chapters.length) * 100);
+
+    if (chapterIndex + 1 < path.chapters.length) {
+      progress.currentChapterId = path.chapters[chapterIndex + 1].id;
+    }
+
+    if (progress.overallCompletion === 100) {
+      progress.completedAt = new Date();
+    }
+
+    // Use a transaction to ensure progress save and XP addition are atomic
+    const session = await mongoose.startSession();
+    try {
+      session.startTransaction();
+      await progress.save({ session });
+
+      const user: any = await User.findById(userId).session(session);
       let newRank = user?.rank;
       if (user) {
-        // Use EvolutionService to handle XP, rank, and logs
         const evolutionResult = await EvolutionService.addXP(
-          userId, 
-          chapterXPReward, 
-          path.domain, 
-          `Completed chapter: ${chapter.title}`, 
-          { pathId: path._id, chapterId: chapter.id }
+          userId,
+          chapterXPReward,
+          path.domain,
+          `Completed chapter: ${chapter.title}`,
+          { pathId: path._id, chapterId: chapter.id },
+          session
         );
         newRank = evolutionResult.user.rank;
       }
 
-      return { 
-        message: 'Chapter completed successfully', 
+      await session.commitTransaction();
+      session.endSession();
+
+      return {
+        message: 'Chapter completed successfully',
         xpEarned: chapterXPReward,
         newRank: newRank,
         overallCompletion: progress.overallCompletion,
-        nextChapterId: progress.currentChapterId
+        nextChapterId: progress.currentChapterId,
       };
-    } catch (error) {
-      throw error;
+    } catch (err) {
+      await session.abortTransaction();
+      session.endSession();
+      throw err;
     }
   }
 

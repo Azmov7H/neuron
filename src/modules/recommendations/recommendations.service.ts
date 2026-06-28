@@ -3,11 +3,14 @@
  * Personalized recommendation engine with AI-aware persistence
  */
 
-import { Recommendation, RecommendationProfile } from '@/database/models/recommendation';
+import { Recommendation } from '@/database/models/recommendation';
 import { User } from '@/database/models/user';
 import { NeuralPath } from '@/database/models/neural-path';
 import { Discovery } from '@/database/models/discovery';
 import { AppError } from '@/types';
+import { cache, cacheKey } from '@/cache';
+import { config } from '@/config/env';
+import { IDiscovery, IRecommendation } from '@/types';
 
 export class RecommendationsService {
   /**
@@ -26,14 +29,21 @@ export class RecommendationsService {
       .lean();
 
     // Get related paths based on discoveries
-    const domainIds = discoveries.map((d) => d.domain);
-    const query: any = {
+    const discoveriesTyped = discoveries as IDiscovery[];
+    const domainIds = discoveriesTyped.map((d) => d.domain);
+    const query = {
       domain: { $in: domainIds },
       isActive: true,
-      _id: { $nin: user.learningHistory },
+      _id: { $nin: (user.learningHistory || []).map((id: unknown) => String(id)) },
     };
 
-    const recommendedPaths = await NeuralPath.find(query)
+    const recommendedPaths = await NeuralPath.find()
+      .where('domain')
+      .in(domainIds)
+      .where('isActive')
+      .equals(true)
+      .where('_id')
+      .nin((user.learningHistory || []).map((id: unknown) => String(id)))
       .sort({ completionRate: -1 })
       .limit(limit)
       .lean();
@@ -65,6 +75,13 @@ export class RecommendationsService {
       await Recommendation.insertMany(recommendations);
     }
 
+    // Invalidate cache for this user's recommendations
+    try {
+      await cache.delete(cacheKey('recommendations', userId));
+    } catch {
+      // ignore cache delete errors
+    }
+
     return recommendations;
   }
 
@@ -72,12 +89,18 @@ export class RecommendationsService {
    * Get active recommendations for user
    */
   static async getRecommendations(userId: string) {
+    const key = cacheKey('recommendations', userId);
+    const cached = await cache.get(key) as IRecommendation[] | null;
+    if (cached) return cached;
+
     const recommendations = await Recommendation.find({
       userId,
       expiresAt: { $gt: new Date() },
     })
       .sort({ relevanceScore: -1 })
       .lean();
+
+    await cache.set(key, recommendations, config.cache.ttl.recommendations || 1800);
 
     return recommendations;
   }

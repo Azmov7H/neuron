@@ -7,17 +7,25 @@ import { User } from '@/database/models/user';
 import { UserProgress } from '@/database/models/user-progress';
 import { EvolutionLog } from '@/database/models/evolution-log';
 import { AppError } from '@/types';
+import mongoose from 'mongoose';
 
 export class EvolutionService {
   /**
    * Add XP to user
    */
-  static async addXP(userId: string, amount: number, domain: string, reason: string = 'General XP Gain', metadata?: any) {
+  static async addXP(
+    userId: string,
+    amount: number,
+    domain: string,
+    reason: string = 'General XP Gain',
+    metadata?: Record<string, unknown>,
+    session?: mongoose.ClientSession
+  ) {
     if (amount < 0) {
       throw new AppError(400, 'XP amount must be positive', 'INVALID_XP');
     }
 
-    const user = await User.findById(userId);
+    const user = await User.findById(userId).session(session || null);
     if (!user) {
       throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
     }
@@ -48,25 +56,56 @@ export class EvolutionService {
       });
     }
 
-    await user.save();
+    if (session) {
+      await user.save({ session });
+      await EvolutionLog.create(
+        [
+          {
+            userId,
+            type: 'XP_GAIN',
+            xp: amount,
+            reason,
+            metadata: metadata || { domain },
+          },
+        ],
+        { session }
+      );
 
-    // Log XP
-    await EvolutionLog.create({
-      userId,
-      type: 'XP_GAIN',
-      xp: amount,
-      reason,
-      metadata: metadata || { domain }
-    });
+      if (isRankUp) {
+        await EvolutionLog.create(
+          [
+            {
+              userId,
+              type: 'RANK_UP',
+              xp: 0,
+              reason: `Promoted to ${user.rank}`,
+              metadata: { previousRank, newRank: user.rank },
+            },
+          ],
+          { session }
+        );
+      }
+    } else {
+      await user.save();
 
-    if (isRankUp) {
+      // Log XP
       await EvolutionLog.create({
         userId,
-        type: 'RANK_UP',
-        xp: 0,
-        reason: `Promoted to ${user.rank}`,
-        metadata: { previousRank, newRank: user.rank }
+        type: 'XP_GAIN',
+        xp: amount,
+        reason,
+        metadata: metadata || { domain },
       });
+
+      if (isRankUp) {
+        await EvolutionLog.create({
+          userId,
+          type: 'RANK_UP',
+          xp: 0,
+          reason: `Promoted to ${user.rank}`,
+          metadata: { previousRank, newRank: user.rank },
+        });
+      }
     }
 
     return { user, isRankUp, addedXp: amount };
@@ -89,12 +128,9 @@ export class EvolutionService {
     
     const daysDiff = Math.floor((todayDay.getTime() - lastActiveDay.getTime()) / (1000 * 60 * 60 * 24));
 
-    let streakUpdated = false;
-
     // Increment streak if active today or yesterday
     if (daysDiff === 1) {
       user.streak++;
-      streakUpdated = true;
       await EvolutionLog.create({
         userId,
         type: 'STREAK_UPDATE',
@@ -105,7 +141,6 @@ export class EvolutionService {
     } else if (daysDiff > 1) {
       // Reset streak
       user.streak = 1;
-      streakUpdated = true;
       await EvolutionLog.create({
         userId,
         type: 'STREAK_UPDATE',
