@@ -44,6 +44,9 @@ export const config = {
     openaiApiKey: process.env.OPENAI_API_KEY ?? '',
     openaiModel: getEnv('OPENAI_MODEL', 'gpt-4-turbo'),
     embeddingModel: getEnv('EMBEDDING_MODEL', 'text-embedding-3-small'),
+    openRouterApiKey: process.env.OPENROUTER_API_KEY ?? '',
+    openRouterModel: getEnv('OPENROUTER_MODEL', 'google/gemma-4-26b-a4b-it:free'),
+    activeProvider: getEnv('AI_PROVIDER', 'openrouter'),
   },
 
   // Server
@@ -52,8 +55,8 @@ export const config = {
     port: parseInt(getEnv('PORT', '3000')),
     dashboardSecret:
       nodeEnv === 'production'
-        ? getEnv('DASHBOARD_SECRET')
-        : process.env.DASHBOARD_SECRET?.trim() || 'development-dashboard-secret',
+         ? getEnv('DASHBOARD_SECRET')
+         : process.env.DASHBOARD_SECRET?.trim() || 'development-dashboard-secret',
     isDevelopment: nodeEnv === 'development',
     isProduction: nodeEnv === 'production',
   },
@@ -90,8 +93,8 @@ export const config = {
   },
 };
 
-if (config.features.enableSparkAI && !config.ai.openaiApiKey) {
-  throw new Error('ENABLE_SPARK_AI is enabled but OPENAI_API_KEY is not configured.');
+if (config.features.enableSparkAI && !config.ai.openaiApiKey && !config.ai.openRouterApiKey) {
+  throw new Error('ENABLE_SPARK_AI is enabled but neither OPENAI_API_KEY nor OPENROUTER_API_KEY is configured.');
 }
 
 if (config.cache.enableRedis && !config.cache.redisUrl) {
