@@ -3,8 +3,7 @@
  * Domain service for managing XP rewards, domain progression levels, and student promotions.
  */
 
-import { User } from '@/database/models/user';
-import { EvolutionLog } from '@/database/models/evolution-log';
+import { EvolutionRepository } from './EvolutionRepository';
 import { AppError } from '@/types';
 import mongoose from 'mongoose';
 
@@ -24,7 +23,7 @@ export class XPService {
       throw new AppError(400, 'XP amount must be positive', 'INVALID_XP');
     }
 
-    const user = await User.findById(userId).session(session || null);
+    const user = await EvolutionRepository.findUserWithSession(userId, session);
     if (!user) {
       throw new AppError(404, 'User not found', 'USER_NOT_FOUND');
     }
@@ -35,7 +34,9 @@ export class XPService {
     user.totalXP += amount;
 
     // Update rank based on total XP
-    user.rank = typeof user.calculateRank === 'function' ? user.calculateRank() : user.rank;
+    if (typeof user.calculateRank === 'function') {
+      user.rank = user.calculateRank();
+    }
     const isRankUp = previousRank !== user.rank;
 
     // Update domain-specific XP
@@ -56,39 +57,37 @@ export class XPService {
     }
 
     if (session) {
-      await user.save({ session });
-      await EvolutionLog.create(
-        [
-          {
-            userId,
-            type: 'XP_GAIN',
-            xp: amount,
-            reason,
-            metadata: metadata || { domain },
-          },
-        ],
-        { session }
+      const userObj = user.toObject();
+      const updateData = { ...userObj, _id: userObj._id.toString() };
+      await EvolutionRepository.updateUser(userId, updateData, session);
+      await EvolutionRepository.createEvolutionLog(
+        {
+          userId,
+          type: 'XP_GAIN',
+          xp: amount,
+          reason,
+          metadata: metadata || { domain },
+        },
+        session
       );
 
       if (isRankUp) {
-        await EvolutionLog.create(
-          [
-            {
-              userId,
-              type: 'RANK_UP',
-              xp: 0,
-              reason: `Promoted to ${user.rank}`,
-              metadata: { previousRank, newRank: user.rank },
-            },
-          ],
-          { session }
+        await EvolutionRepository.createEvolutionLog(
+          {
+            userId,
+            type: 'RANK_UP',
+            xp: 0,
+            reason: `Promoted to ${user.rank}`,
+            metadata: { previousRank, newRank: user.rank },
+          },
+          session
         );
       }
     } else {
       await user.save();
 
       // Log XP
-      await EvolutionLog.create({
+      await EvolutionRepository.createEvolutionLog({
         userId,
         type: 'XP_GAIN',
         xp: amount,
@@ -97,7 +96,7 @@ export class XPService {
       });
 
       if (isRankUp) {
-        await EvolutionLog.create({
+        await EvolutionRepository.createEvolutionLog({
           userId,
           type: 'RANK_UP',
           xp: 0,
