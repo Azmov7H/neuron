@@ -5,6 +5,9 @@ import type { Types } from 'mongoose';
  * Centralized type system for the Neuron platform
  */
 
+// Export cognitive types
+export * from './cognitive';
+
 // ============================================
 // USER TYPES
 // ============================================
@@ -76,7 +79,7 @@ export interface Chapter {
 }
 
 export interface INeuralPath {
-  _id: string;
+  _id: Types.ObjectId;
   slug: string;
   title: string;
   description: string;
@@ -118,6 +121,8 @@ export interface IUserProgress {
   completedAt?: Date;
   startedAt: Date;
   lastAccessedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
 // ============================================
@@ -186,12 +191,20 @@ export interface IDiscovery {
   domain: string;
   relatedConcepts: string[];
   importance: number; // 0-100
+  frequency: number; // number of times encountered
+  usedLater: boolean; // applied in later learning
+  mastered: boolean; // user has demonstrated mastery
+  prerequisites: string[];
+  applications: string[];
   context: {
     sourcePathId?: Types.ObjectId | string;
     sourceChapterId?: string;
     fromSparkSession?: Types.ObjectId | string;
   };
   userInterest: number; // 0-100 based on engagement
+  revisitCount: number;
+  firstDiscovered: Date;
+  lastRevisited?: Date;
   discoveredAt: Date;
 }
 
@@ -218,20 +231,31 @@ export interface RecommendationProfile {
   lastUpdated: Date;
 }
 
+export type RecommendationType =
+  | 'path'
+  | 'concept'
+  | 'domain'
+  | 'simulation'
+  | 'research'
+  | 'video'
+  | 'experiment'
+  | 'article'
+  | 'matrix';
+
 export interface IRecommendation {
-  _id: string;
+  _id: Types.ObjectId;
   userId: Types.ObjectId | string;
-  type: 'path' | 'concept' | 'domain';
+  type: RecommendationType;
   targetId: string;
   targetTitle: string;
   reason: string;
   relevanceScore: number; // 0-1
   confidenceScore: number; // 0-1
-  metadata: {
-    basedOnBehavior: boolean;
-    basedOnProgress: boolean;
-    basedOnInterests: boolean;
-    basedOnPeerData: boolean;
+  metadata: Record<string, unknown> & {
+    basedOnBehavior?: boolean;
+    basedOnProgress?: boolean;
+    basedOnInterests?: boolean;
+    basedOnPeerData?: boolean;
   };
   createdAt: Date;
   expiresAt: Date;

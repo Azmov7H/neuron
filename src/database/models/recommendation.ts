@@ -47,7 +47,7 @@ const recommendationSchema = new Schema<IRecommendation & Document>(
     },
     type: {
       type: String,
-      enum: ['path', 'concept', 'domain'],
+      enum: ['path', 'concept', 'domain', 'simulation', 'research', 'video', 'experiment', 'article', 'matrix'],
       required: true,
       index: true,
     },
@@ -78,10 +78,8 @@ const recommendationSchema = new Schema<IRecommendation & Document>(
       max: 1,
     },
     metadata: {
-      basedOnBehavior: { type: Boolean, default: false },
-      basedOnProgress: { type: Boolean, default: false },
-      basedOnInterests: { type: Boolean, default: false },
-      basedOnPeerData: { type: Boolean, default: false },
+      type: Schema.Types.Mixed,
+      default: {},
     },
     createdAt: {
       type: Date,

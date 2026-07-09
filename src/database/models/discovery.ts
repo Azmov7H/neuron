@@ -55,6 +55,33 @@ const discoverySchema = new Schema<IDiscovery & Document>(
       default: 50,
       index: true,
     },
+    frequency: {
+      type: Number,
+      min: 0,
+      default: 1,
+    },
+    usedLater: {
+      type: Boolean,
+      default: false,
+    },
+    mastered: {
+      type: Boolean,
+      default: false,
+    },
+    prerequisites: [String],
+    applications: [String],
+    revisitCount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    firstDiscovered: {
+      type: Date,
+      default: Date.now,
+    },
+    lastRevisited: {
+      type: Date,
+    },
     discoveredAt: {
       type: Date,
       default: Date.now,
