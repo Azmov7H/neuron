@@ -42,6 +42,7 @@ export class AuthService {
       userId: user._id.toString(),
       email: user.email,
       username: user.username,
+      role: user.role,
     });
 
     return {
@@ -79,6 +80,7 @@ export class AuthService {
       userId: user._id.toString(),
       email: user.email,
       username: user.username,
+      role: user.role,
     });
 
     return {
@@ -107,6 +109,7 @@ export class AuthService {
       userId: user._id.toString(),
       email: user.email,
       username: user.username,
+      role: user.role,
     });
   }
 

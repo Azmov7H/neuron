@@ -70,6 +70,14 @@ const userSchema = new Schema<IUserDocument>(
     },
     avatar: String,
 
+    // RBAC
+    role: {
+      type: String,
+      enum: ['user', 'contributor', 'curator', 'admin'],
+      default: 'user',
+      index: true,
+    },
+
     // Progression
     rank: { type: String, default: 'Observer' },
     totalXP: { type: Number, default: 0, index: true },
