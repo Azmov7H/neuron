@@ -21,6 +21,190 @@
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-card: hsl(var(--card));
   --color-card-foreground: hsl(var(--card-foreground));
+
+  /* ── Surface & structure ─────────────────────────────── */
+  --color-surface: hsl(var(--surface));
+  --color-elevated: hsl(var(--elevated));
+  --color-divider: hsl(var(--divider));
+
+  /* ── Neutral (Ink) ramp ────────────────────────────── */
+  --color-neutral-50:  hsl(var(--neutral-50));
+  --color-neutral-100: hsl(var(--neutral-100));
+  --color-neutral-200: hsl(var(--neutral-200));
+  --color-neutral-300: hsl(var(--neutral-300));
+  --color-neutral-400: hsl(var(--neutral-400));
+  --color-neutral-500: hsl(var(--neutral-500));
+  --color-neutral-600: hsl(var(--neutral-600));
+  --color-neutral-700: hsl(var(--neutral-700));
+  --color-neutral-800: hsl(var(--neutral-800));
+  --color-neutral-900: hsl(var(--neutral-900));
+  --color-neutral-950: hsl(var(--neutral-950));
+
+  /* ── Primary (Emerald) ramp ─────────────────────────── */
+  --color-primary-50:  hsl(var(--primary-50));
+  --color-primary-100: hsl(var(--primary-100));
+  --color-primary-200: hsl(var(--primary-200));
+  --color-primary-300: hsl(var(--primary-300));
+  --color-primary-400: hsl(var(--primary-400));
+  --color-primary-500: hsl(var(--primary-500));
+  --color-primary-600: hsl(var(--primary-600));
+  --color-primary-700: hsl(var(--primary-700));
+  --color-primary-800: hsl(var(--primary-800));
+  --color-primary-900: hsl(var(--primary-900));
+  --color-primary-950: hsl(var(--primary-950));
+
+  /* ── Secondary (Cyan) ramp ─────────────────────────── */
+  --color-secondary-50:  hsl(var(--secondary-50));
+  --color-secondary-100: hsl(var(--secondary-100));
+  --color-secondary-200: hsl(var(--secondary-200));
+  --color-secondary-300: hsl(var(--secondary-300));
+  --color-secondary-400: hsl(var(--secondary-400));
+  --color-secondary-500: hsl(var(--secondary-500));
+  --color-secondary-600: hsl(var(--secondary-600));
+  --color-secondary-700: hsl(var(--secondary-700));
+  --color-secondary-800: hsl(var(--secondary-800));
+  --color-secondary-900: hsl(var(--secondary-900));
+  --color-secondary-950: hsl(var(--secondary-950));
+
+  /* ── Accent (Indigo) ramp ──────────────────────────── */
+  --color-accent-50:  hsl(var(--accent-50));
+  --color-accent-100: hsl(var(--accent-100));
+  --color-accent-200: hsl(var(--accent-200));
+  --color-accent-300: hsl(var(--accent-300));
+  --color-accent-400: hsl(var(--accent-400));
+  --color-accent-500: hsl(var(--accent-500));
+  --color-accent-600: hsl(var(--accent-600));
+  --color-accent-700: hsl(var(--accent-700));
+  --color-accent-800: hsl(var(--accent-800));
+  --color-accent-900: hsl(var(--accent-900));
+  --color-accent-950: hsl(var(--accent-950));
+
+  /* ── Semantic ramps ─────────────────────────────────── */
+  --color-success-50:  hsl(var(--success-50));
+  --color-success-100: hsl(var(--success-100));
+  --color-success-200: hsl(var(--success-200));
+  --color-success-300: hsl(var(--success-300));
+  --color-success-400: hsl(var(--success-400));
+  --color-success-500: hsl(var(--success-500));
+  --color-success-600: hsl(var(--success-600));
+  --color-success-700: hsl(var(--success-700));
+  --color-success-800: hsl(var(--success-800));
+  --color-success-900: hsl(var(--success-900));
+  --color-success-950: hsl(var(--success-950));
+
+  --color-warning-50:  hsl(var(--warning-50));
+  --color-warning-100: hsl(var(--warning-100));
+  --color-warning-200: hsl(var(--warning-200));
+  --color-warning-300: hsl(var(--warning-300));
+  --color-warning-400: hsl(var(--warning-400));
+  --color-warning-500: hsl(var(--warning-500));
+  --color-warning-600: hsl(var(--warning-600));
+  --color-warning-700: hsl(var(--warning-700));
+  --color-warning-800: hsl(var(--warning-800));
+  --color-warning-900: hsl(var(--warning-900));
+  --color-warning-950: hsl(var(--warning-950));
+
+  --color-danger-50:  hsl(var(--danger-50));
+  --color-danger-100: hsl(var(--danger-100));
+  --color-danger-200: hsl(var(--danger-200));
+  --color-danger-300: hsl(var(--danger-300));
+  --color-danger-400: hsl(var(--danger-400));
+  --color-danger-500: hsl(var(--danger-500));
+  --color-danger-600: hsl(var(--danger-600));
+  --color-danger-700: hsl(var(--danger-700));
+  --color-danger-800: hsl(var(--danger-800));
+  --color-danger-900: hsl(var(--danger-900));
+  --color-danger-950: hsl(var(--danger-950));
+
+  --color-info-50:  hsl(var(--info-50));
+  --color-info-100: hsl(var(--info-100));
+  --color-info-200: hsl(var(--info-200));
+  --color-info-300: hsl(var(--info-300));
+  --color-info-400: hsl(var(--info-400));
+  --color-info-500: hsl(var(--info-500));
+  --color-info-600: hsl(var(--info-600));
+  --color-info-700: hsl(var(--info-700));
+  --color-info-800: hsl(var(--info-800));
+  --color-info-900: hsl(var(--info-900));
+  --color-info-950: hsl(var(--info-950));
+
+  /* ── Domain (SciOS) colors ──────────────────────────── */
+  --color-sci-physics:    hsl(var(--sci-physics));
+  --color-sci-biology:    hsl(var(--sci-biology));
+  --color-sci-math:       hsl(var(--sci-math));
+  --color-sci-quantum:    hsl(var(--sci-quantum));
+  --color-sci-space:      hsl(var(--sci-space));
+  --color-sci-tech:       hsl(var(--sci-tech));
+  --color-sci-ai:         hsl(var(--sci-ai));
+  --color-sci-chemistry:  hsl(var(--sci-chemistry));
+  --color-sci-anatomy:    hsl(var(--sci-anatomy));
+  --color-sci-astronomy:  hsl(var(--sci-astronomy));
+
+  /* ── Chart categorical colors ────────────────────────── */
+  --color-chart-1:  hsl(var(--chart-1));
+  --color-chart-2:  hsl(var(--chart-2));
+  --color-chart-3:  hsl(var(--chart-3));
+  --color-chart-4:  hsl(var(--chart-4));
+  --color-chart-5:  hsl(var(--chart-5));
+  --color-chart-6:  hsl(var(--chart-6));
+  --color-chart-7:  hsl(var(--chart-7));
+  --color-chart-8:  hsl(var(--chart-8));
+  --color-chart-9:  hsl(var(--chart-9));
+  --color-chart-10: hsl(var(--chart-10));
+  --color-chart-11: hsl(var(--chart-11));
+  --color-chart-12: hsl(var(--chart-12));
+
+  /* ── Simulation colors ───────────────────────────────── */
+  --color-sim-input:   hsl(var(--sim-input));
+  --color-sim-running: hsl(var(--sim-running));
+  --color-sim-output:  hsl(var(--sim-output));
+  --color-sim-error:   hsl(var(--sim-error));
+  --color-sim-paused:  hsl(var(--sim-paused));
+  --color-sim-track:   hsl(var(--sim-track));
+
+  /* ── Evolution colors ────────────────────────────────── */
+  --color-evo-xp:         hsl(var(--evo-xp));
+  --color-evo-streak:     hsl(var(--evo-streak));
+  --color-evo-level:      hsl(var(--evo-level));
+  --color-evo-milestone:  hsl(var(--evo-milestone));
+  --color-evo-reward:     hsl(var(--evo-reward));
+
+  /* ── Leaderboard rank tiers ──────────────────────────── */
+  --color-rank-diamond:  hsl(var(--rank-diamond));
+  --color-rank-platinum: hsl(var(--rank-platinum));
+  --color-rank-gold:     hsl(var(--rank-gold));
+  --color-rank-silver:   hsl(var(--rank-silver));
+  --color-rank-bronze:   hsl(var(--rank-bronze));
+  --color-rank-standard: hsl(var(--rank-standard));
+
+  /* ── AI Response colors ─────────────────────────────── */
+  --color-ai-assistant-bg:    hsl(var(--ai-assistant-bg));
+  --color-ai-assistant-border: hsl(var(--ai-assistant-border));
+  --color-ai-user-bg:         hsl(var(--ai-user-bg));
+  --color-ai-citation:        hsl(var(--ai-citation));
+  --color-ai-stream-cursor:   hsl(var(--ai-stream-cursor));
+  --color-ai-confidence:      hsl(var(--ai-confidence));
+  --color-ai-thinking:        hsl(var(--ai-thinking));
+
+  /* ── Radius scale (Foundation) ──────────────────────── */
+  --radius-xs: 0.25rem;
+  --radius-sm: calc(var(--radius) - 0.125rem);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 0.25rem);
+  --radius-xl: calc(var(--radius) + 0.5rem);
+  --radius-2xl: calc(var(--radius) + 1rem);
+  --radius-full: 9999px;
+
+  /* ── Shadow scale (Foundation) ──────────────────────── */
+  --shadow-xs:       0 1px 2px hsl(222 47% 3% / 0.4);
+  --shadow-sm:       0 1px 3px hsl(222 47% 3% / 0.5);
+  --shadow-md:       0 4px 12px hsl(222 47% 3% / 0.55);
+  --shadow-lg:       0 12px 32px hsl(222 47% 3% / 0.6);
+  --shadow-xl:       0 24px 64px hsl(222 47% 3% / 0.65);
+  --shadow-floating: 0 8px 28px hsl(222 47% 3% / 0.6);
+  --shadow-focus:    0 0 0 3px hsl(157 100% 50% / 0.35);
+  --shadow-glow:     0 0 24px hsl(157 100% 50% / 0.25);
+  --shadow-glass:    inset 0 1px 0 hsl(0 0% 100% / 0.04);
 }
 
 /* ── Base tokens ───────────────────────────────────────────── */
@@ -72,6 +256,162 @@
     --command-bar-height:  40px;
     --bottom-dock-height:  32px;
     --context-panel-width: 264px;
+
+    /* ── Neutral (Ink) ramp ───────────────────────── */
+    --neutral-50:  222 47% 97%;
+    --neutral-100: 220 39% 92%;
+    --neutral-200: 218 33% 82%;
+    --neutral-300: 216 28% 68%;
+    --neutral-400: 215 20% 55%;
+    --neutral-500: 217 30% 45%;
+    --neutral-600: 217 33% 32%;
+    --neutral-700: 217 36% 22%;
+    --neutral-800: 218 39% 15%;
+    --neutral-900: 222 44% 9%;
+    --neutral-950: 222 47% 5%;
+
+    /* ── Primary (Emerald) ramp ────────────────────── */
+    --primary-50:  157 80% 95%;
+    --primary-100: 157 90% 88%;
+    --primary-200: 157 95% 76%;
+    --primary-300: 158 96% 64%;
+    --primary-400: 157 98% 56%;
+    --primary-500: 157 100% 50%;
+    --primary-600: 158 92% 42%;
+    --primary-700: 159 84% 34%;
+    --primary-800: 159 77% 27%;
+    --primary-900: 160 70% 21%;
+    --primary-950: 161 70% 12%;
+
+    /* ── Secondary (Cyan) ramp ─────────────────────── */
+    --secondary-50:  195 90% 94%;
+    --secondary-100: 195 95% 85%;
+    --secondary-200: 195 98% 72%;
+    --secondary-300: 195 99% 60%;
+    --secondary-400: 195 100% 52%;
+    --secondary-500: 195 100% 50%;
+    --secondary-600: 196 90% 42%;
+    --secondary-700: 197 82% 34%;
+    --secondary-800: 198 75% 27%;
+    --secondary-900: 199 68% 21%;
+    --secondary-950: 200 65% 13%;
+
+    /* ── Accent (Indigo) ramp ──────────────────────── */
+    --accent-50:  240 90% 96%;
+    --accent-100: 240 91% 88%;
+    --accent-200: 240 92% 78%;
+    --accent-300: 240 90% 68%;
+    --accent-400: 240 87% 60%;
+    --accent-500: 239 84% 67%;
+    --accent-600: 240 80% 56%;
+    --accent-700: 240 76% 47%;
+    --accent-800: 240 72% 39%;
+    --accent-900: 240 68% 32%;
+    --accent-950: 240 65% 24%;
+
+    /* ── Semantic ramps ─────────────────────────────── */
+    --success-50: 142 70% 95%;
+    --success-100: 142 72% 86%;
+    --success-200: 142 73% 74%;
+    --success-300: 142 72% 62%;
+    --success-400: 142 72% 52%;
+    --success-500: 142 71% 45%;
+    --success-600: 142 70% 38%;
+    --success-700: 142 68% 31%;
+    --success-800: 142 66% 25%;
+    --success-900: 142 64% 20%;
+    --success-950: 142 65% 13%;
+
+    --warning-50: 38 92% 95%;
+    --warning-100: 38 94% 86%;
+    --warning-200: 38 95% 74%;
+    --warning-300: 38 95% 62%;
+    --warning-400: 38 95% 55%;
+    --warning-500: 38 92% 50%;
+    --warning-600: 38 90% 42%;
+    --warning-700: 38 88% 34%;
+    --warning-800: 38 85% 28%;
+    --warning-900: 38 82% 22%;
+    --warning-950: 38 80% 14%;
+
+    --danger-50: 0 80% 96%;
+    --danger-100: 0 84% 88%;
+    --danger-200: 0 85% 76%;
+    --danger-300: 0 82% 64%;
+    --danger-400: 0 78% 56%;
+    --danger-500: 0 75% 50%;
+    --danger-600: 0 74% 43%;
+    --danger-700: 0 72% 36%;
+    --danger-800: 0 70% 30%;
+    --danger-900: 0 68% 24%;
+    --danger-950: 0 70% 16%;
+
+    --info-50: 210 90% 95%;
+    --info-100: 210 94% 86%;
+    --info-200: 210 96% 74%;
+    --info-300: 210 98% 62%;
+    --info-400: 210 100% 54%;
+    --info-500: 210 100% 60%;
+    --info-600: 211 92% 48%;
+    --info-700: 212 84% 40%;
+    --info-800: 213 76% 33%;
+    --info-900: 214 68% 27%;
+    --info-950: 215 65% 18%;
+
+    /* ── Surface & structure ────────────────────────── */
+    --surface: 218 39% 15%;
+    --elevated: 222 44% 9%;
+    --divider: 217 36% 22%;
+    --selection-bg: 157 100% 50% / 0.22;
+    --selection-text: 213 31% 98%;
+    --focus-ring: 157 100% 50% / 0.5;
+    --overlay: 222 47% 3% / 0.6;
+
+    /* ── Chart categorical colors ───────────────────── */
+    --chart-1: 210 100% 60%;
+    --chart-2: 157 100% 50%;
+    --chart-3: 271 91% 65%;
+    --chart-4: 186 100% 50%;
+    --chart-5: 25 95% 55%;
+    --chart-6: 239 84% 67%;
+    --chart-7: 45 95% 55%;
+    --chart-8: 0 72% 60%;
+    --chart-9: 330 85% 62%;
+    --chart-10: 95 70% 50%;
+    --chart-11: 200 100% 55%;
+    --chart-12: 285 80% 65%;
+
+    /* ── AI Response colors ─────────────────────────── */
+    --ai-assistant-bg: 239 84% 67% / 0.08;
+    --ai-assistant-border: 239 84% 67% / 0.22;
+    --ai-user-bg: 217 41% 17%;
+    --ai-citation: 239 84% 67%;
+    --ai-stream-cursor: 157 100% 50%;
+    --ai-confidence: 157 100% 50%;
+    --ai-thinking: 215 20% 55%;
+
+    /* ── Simulation colors ──────────────────────────── */
+    --sim-input: 195 100% 50%;
+    --sim-running: 38 92% 50%;
+    --sim-output: 157 100% 50%;
+    --sim-error: 0 75% 50%;
+    --sim-paused: 215 20% 55%;
+    --sim-track: 217 41% 13%;
+
+    /* ── Evolution colors ───────────────────────────── */
+    --evo-xp: 157 100% 50%;
+    --evo-streak: 25 95% 55%;
+    --evo-level: 239 84% 67%;
+    --evo-milestone: 186 100% 50%;
+    --evo-reward: 45 95% 55%;
+
+    /* ── Leaderboard rank tiers ────────────────────── */
+    --rank-diamond: 186 100% 50%;
+    --rank-platinum: 213 31% 91%;
+    --rank-gold: 45 95% 55%;
+    --rank-silver: 215 16% 70%;
+    --rank-bronze: 25 70% 50%;
+    --rank-standard: 217 36% 22%;
   }
 }
 
@@ -407,3 +747,33 @@
   -ms-overflow-style: none;
 }
 .scrollbar-none::-webkit-scrollbar { display: none; }
+
+/* ============================================================
+   LIGHT MODE OVERRIDE — apply .theme-light to <html>
+   Only neutral-based tokens invert; accent/domain hues are kept.
+   ============================================================ */
+.theme-light {
+  --background: 222 47% 97%;
+  --foreground: 222 47% 9%;
+  --surface: 0 0% 100%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 9%;
+  --elevated: 220 39% 96%;
+  --border: 217 33% 82%;
+  --divider: 218 33% 82%;
+  --input: 217 33% 82%;
+  --muted: 218 33% 90%;
+  --muted-foreground: 215 20% 40%;
+  --ring: 157 100% 42%;
+  --selection-bg: 157 100% 50% / 0.18;
+  --focus-ring: 157 100% 50% / 0.45;
+  --overlay: 222 47% 9% / 0.5;
+
+  --shadow-xs:       0 1px 2px hsl(222 47% 9% / 0.08);
+  --shadow-sm:       0 1px 3px hsl(222 47% 9% / 0.10);
+  --shadow-md:       0 4px 12px hsl(222 47% 9% / 0.12);
+  --shadow-lg:       0 12px 32px hsl(222 47% 9% / 0.14);
+  --shadow-xl:       0 24px 64px hsl(222 47% 9% / 0.16);
+  --shadow-floating: 0 8px 28px hsl(222 47% 9% / 0.12);
+  --shadow-glass:    inset 0 1px 0 hsl(0 0% 0% / 0.04);
+}
