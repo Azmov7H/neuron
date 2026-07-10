@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAccessToken, extractTokenFromHeader } from '@/lib/auth/jwt';
-import { RequestContext, AppError } from '@/types';
+import { RequestContext, AppError, Role, ROLE_HIERARCHY } from '@/types';
 import { ApiResponseHandler } from '@/lib/utils/response';
 import { config } from '@/config/env';
 import { logger } from '@/lib/logger';
@@ -47,6 +47,7 @@ export function authenticateRequest(request: NextRequest): RequestContext | null
     userId: payload.userId,
     email: payload.email,
     username: payload.username,
+    role: payload.role,
     isAuthenticated: true,
   };
 }
@@ -82,6 +83,47 @@ export function requireAuth(handler: RouteHandler): RouteHandler {
       logger.error('[Auth] requireAuth error:', error);
       return ApiResponseHandler.unauthorized('Invalid token');
     }
+  };
+}
+
+// ─────────────────────────────────────────────
+// Middleware: requireRole
+// ─────────────────────────────────────────────
+
+/**
+ * Wraps a route handler to require a minimum RBAC role.
+ * Role precedence: user < contributor < curator < admin.
+ * Must be applied OUTSIDE requireAuth so the auth check runs first, e.g.
+ *   requireRole('curator')(requireAuth(handler))
+ * Returns 401 if unauthenticated, 403 if role is insufficient.
+ */
+export function requireRole(minimumRole: Role): (handler: RouteHandler) => RouteHandler {
+  return (handler: RouteHandler): RouteHandler => {
+    return async (request, context) => {
+      try {
+        const auth = authenticateRequest(request);
+
+        if (!auth) {
+          return ApiResponseHandler.unauthorized('Authentication required');
+        }
+
+        const userLevel = ROLE_HIERARCHY[auth.role] ?? 0;
+        const requiredLevel = ROLE_HIERARCHY[minimumRole] ?? 0;
+
+        if (userLevel < requiredLevel) {
+          return ApiResponseHandler.forbidden(
+            `Requires role "${minimumRole}" or higher`
+          );
+        }
+
+        (request as NextRequest & { auth: RequestContext }).auth = auth;
+
+        return handler(request, context);
+      } catch (error) {
+        logger.error('[Auth] requireRole error:', error);
+        return ApiResponseHandler.unauthorized('Invalid token');
+      }
+    };
   };
 }
 

@@ -8,6 +8,22 @@ import type { Types } from 'mongoose';
 // Export cognitive types
 export * from './cognitive';
 
+// Export scientific knowledge-engine types
+export * from './knowledge';
+
+// ============================================
+// RBAC ROLES
+// ============================================
+
+export type Role = 'user' | 'contributor' | 'curator' | 'admin';
+
+export const ROLE_HIERARCHY: Record<Role, number> = {
+  user: 0,
+  contributor: 1,
+  curator: 2,
+  admin: 3,
+};
+
 // ============================================
 // USER TYPES
 // ============================================
@@ -37,6 +53,7 @@ export interface IUser {
   email: string;
   password: string;
   avatar?: string;
+  role: Role;
 
   // Progression
   rank: string;
@@ -271,6 +288,7 @@ export interface JWTPayload {
   userId: string;
   email: string;
   username: string;
+  role: Role;
   iat: number;
   exp: number;
 }
@@ -338,5 +356,6 @@ export interface RequestContext {
   userId: string;
   email: string;
   username: string;
+  role: Role;
   isAuthenticated: boolean;
 }
