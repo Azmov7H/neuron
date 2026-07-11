@@ -2,6 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import type { Role } from "@/types";
 import { WorkspaceProvider } from "./workspace-context";
 import { CommandBar } from "./command-bar";
 import { WorkspaceNav } from "./workspace-nav";
@@ -11,6 +12,8 @@ import { BottomDock } from "./bottom-dock";
 interface WorkspaceLayoutProps {
   children: React.ReactNode;
   className?: string;
+  /** Role resolved server-side and injected into the shell */
+  role?: Role | null;
 }
 
 /**
@@ -34,6 +37,19 @@ function WorkspaceShell({ children, className }: WorkspaceLayoutProps) {
         className
       )}
     >
+      {/* Skip link — keyboard / screen-reader users jump to main content */}
+      <a
+        href="#main-content"
+        className={cn(
+          "sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3",
+          "focus:z-[2000] focus:rounded-md focus:bg-card focus:px-3 focus:py-2",
+          "focus:text-sm focus:text-foreground focus:shadow-lg focus:outline-none",
+          "focus:ring-1 focus:ring-primary/50"
+        )}
+      >
+        Skip to content
+      </a>
+
       {/* Row 1: Command Bar */}
       <CommandBar />
 
@@ -75,9 +91,9 @@ function WorkspaceShell({ children, className }: WorkspaceLayoutProps) {
  * WorkspaceLayout — wraps WorkspaceShell with the context provider.
  * Use this as the outermost wrapper in the dashboard layout.tsx.
  */
-export function WorkspaceLayout({ children, className }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ children, className, role }: WorkspaceLayoutProps) {
   return (
-    <WorkspaceProvider>
+    <WorkspaceProvider role={role}>
       <WorkspaceShell className={className}>{children}</WorkspaceShell>
     </WorkspaceProvider>
   );
