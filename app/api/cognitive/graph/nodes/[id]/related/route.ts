@@ -1,6 +1,6 @@
 /**
- * GET /api/cognitive/graph/nodes/[id]
- * GET concept node by ID
+ * GET /api/cognitive/graph/nodes/[id]/related
+ * GET related concept nodes for a given node
  */
 
 import { NextRequest } from 'next/server';
@@ -9,20 +9,16 @@ import { requireAuth, getAuthContext, withErrorHandling } from '@/middleware/aut
 import { ApiResponseHandler } from '@/lib/utils/response';
 import { KnowledgeGraphService } from '@/modules/cognitive-engine/knowledge-graph.service';
 
-async function getHandler(request: NextRequest, { params }: any) {
+async function getRelatedHandler(request: NextRequest, { params }: any) {
   const auth = getAuthContext(request);
   if (!auth) return ApiResponseHandler.unauthorized();
 
   await connectDB();
 
   const { id } = await params;
-  const node = await KnowledgeGraphService.getNode(auth.userId, id);
+  const related = await KnowledgeGraphService.getRelatedNodes(auth.userId, id);
 
-  if (!node) {
-    return ApiResponseHandler.notFound('Concept not found');
-  }
-
-  return ApiResponseHandler.success(node, 'Concept node retrieved');
+  return ApiResponseHandler.success(related, 'Related concepts retrieved');
 }
 
-export const GET = withErrorHandling(requireAuth(getHandler));
+export const GET = withErrorHandling(requireAuth(getRelatedHandler));
