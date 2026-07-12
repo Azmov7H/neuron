@@ -9,7 +9,7 @@ interface PathProps {
 export function FeaturedPath({ path }: PathProps) {
   return (
     <Link 
-      href={`/neural-paths/${path.slug}`} 
+      href={`/dashboard/neural-paths/${path.slug}`} 
       className="block group relative h-[450px] rounded-2xl overflow-hidden border border-white/5 transition-all hover:border-primary/20 hover:shadow-[0_0_40px_rgba(59,130,246,0.15)]"
     >
       <div 
