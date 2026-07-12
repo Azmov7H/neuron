@@ -1,32 +1,77 @@
-// components/dashboard/explore-domains.tsx
-import { Atom, Brain, Leaf, Pi, Eye, Scale } from "lucide-react";
+"use client";
+
+import { Atom, Brain, Dna, Pi, Orbit, Telescope, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 const domains = [
-  { icon: Atom, label: "Physics", desc: "Fundamental laws of reality", gradient: "from-blue-500/20 to-transparent" },
-  { icon: Brain, label: "AI", desc: "Neural architectures & cognition", gradient: "from-purple-500/20 to-transparent" },
-  { icon: Eye, label: "Consciousness", desc: "The observer effect & mind", gradient: "from-amber-500/20 to-transparent" },
-  { icon: Leaf, label: "Biology", desc: "Systems of life & evolution", gradient: "from-emerald-500/20 to-transparent" },
-  { icon: Pi, label: "Mathematics", desc: "The language of the universe", gradient: "from-cyan-500/20 to-transparent" },
-  { icon: Scale, label: "Philosophy", desc: "Structures of reason & logic", gradient: "from-rose-500/20 to-transparent" },
+  {
+    label: "Physics",
+    icon: Atom,
+    desc: "Classical and relativistic mechanics",
+    colorClass: "text-sci-physics",
+    bgClass: "bg-sci-physics/8 border-sci-physics/10 hover:border-sci-physics/20",
+    href: "/dashboard/simulations",
+  },
+  {
+    label: "Biology",
+    icon: Dna,
+    desc: "Molecular genetics & cellular systems",
+    colorClass: "text-sci-biology",
+    bgClass: "bg-sci-biology/8 border-sci-biology/10 hover:border-sci-biology/20",
+    href: "/dashboard/simulations",
+  },
+  {
+    label: "AI",
+    icon: Brain,
+    desc: "Neural networks & cognitive modeling",
+    colorClass: "text-sci-ai",
+    bgClass: "bg-sci-ai/8 border-sci-ai/10 hover:border-sci-ai/20",
+    href: "/dashboard/explore",
+  },
+  {
+    label: "Mathematics",
+    icon: Pi,
+    desc: "Abstract geometry & field theory",
+    colorClass: "text-sci-math",
+    bgClass: "bg-sci-math/8 border-sci-math/10 hover:border-sci-math/20",
+    href: "/dashboard/explore",
+  },
+  {
+    label: "Quantum",
+    icon: Orbit,
+    desc: "Superposition & wave mechanics",
+    colorClass: "text-sci-quantum",
+    bgClass: "bg-sci-quantum/8 border-sci-quantum/10 hover:border-sci-quantum/20",
+    href: "/dashboard/simulations",
+  },
+  {
+    label: "Astronomy",
+    icon: Telescope,
+    desc: "Astrophysics & stellar evolution",
+    colorClass: "text-sci-astronomy",
+    bgClass: "bg-sci-astronomy/8 border-sci-astronomy/10 hover:border-sci-astronomy/20",
+    href: "/dashboard/explore",
+  },
 ];
 
 export function ExploreDomains() {
   return (
-    <div>
-      <h3 className="text-lg font-semibold text-foreground mb-6">Explore Domains</h3>
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {domains.map((domain) => (
-          <div 
-            key={domain.label} 
-            className="group glass rounded-xl p-5 cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_10px_30px_-10px_rgba(0,0,0,0.5)] glow-border relative overflow-hidden"
+    <div className="rounded-[var(--radius-lg)] border border-border bg-card p-5 animate-fade-in shadow-sm">
+      <h3 className="text-[13px] font-semibold text-foreground mb-4">Explore Domains</h3>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        {domains.map((d) => (
+          <Link
+            key={d.label}
+            href={d.href}
+            className={`flex flex-col p-4 rounded-[var(--radius-md)] border text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md cursor-pointer group ${d.bgClass}`}
           >
-            <div className={`absolute inset-0 bg-gradient-to-b ${domain.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-            <div className="relative z-10">
-              <domain.icon className="text-muted-foreground group-hover:text-foreground transition-colors mb-4" size={24} />
-              <h4 className="font-semibold text-foreground text-sm mb-1">{domain.label}</h4>
-              <p className="text-xs text-muted-foreground leading-relaxed">{domain.desc}</p>
+            <div className="flex items-center justify-between mb-3">
+              <d.icon size={20} className={`${d.colorClass} group-hover:scale-105 transition-transform duration-300`} />
+              <ArrowRight size={12} className="text-muted-foreground/30 group-hover:text-muted-foreground/80 group-hover:translate-x-0.5 transition-all" />
             </div>
-          </div>
+            <h4 className="text-[12px] font-semibold text-foreground mb-1">{d.label}</h4>
+            <p className="text-[10px] text-muted-foreground leading-normal">{d.desc}</p>
+          </Link>
         ))}
       </div>
     </div>

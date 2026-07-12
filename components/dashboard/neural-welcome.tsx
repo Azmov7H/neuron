@@ -3,64 +3,79 @@
 import { useEffect, useState } from "react";
 import { Flame, Zap, Clock, TrendingUp } from "lucide-react";
 import type { DashboardSummary } from "@/app/api/dashboard/summary/route";
+import { PageHeader } from "@/components/workspace/page-header";
 
 function getGreeting() {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good Morning";
-  if (hour < 18) return "Good Afternoon";
-  return "Good Evening";
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
 }
 
-export function NeuralWelcome({ 
+export function NeuralWelcome({
   user,
-  activePath 
-}: { 
+  activePath,
+}: {
   user: DashboardSummary["user"];
   activePath: DashboardSummary["activePath"];
 }) {
-  const [greeting, setGreeting] = useState("");
+  const [greeting, setGreeting] = useState("Hello");
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setGreeting(getGreeting());
   }, []);
 
   const stats = [
     { icon: Zap, label: "XP", value: user.totalXP.toLocaleString(), color: "text-blue-400" },
     { icon: TrendingUp, label: "Rank", value: user.rank, color: "text-purple-400" },
-    { icon: Flame, label: "Streak", value: `${user.streak} Days`, color: "text-amber-400" },
-    { icon: Clock, label: "This Week", value: "Active", color: "text-emerald-400" },
+    { icon: Flame, label: "Streak", value: `${user.streak}d`, color: "text-amber-400" },
+    { icon: Clock, label: "Status", value: "Active", color: "text-emerald-400" },
   ];
 
-  return (
-    <section className="animate-fade-up">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold tracking-tight mb-2">
-          {greeting}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-accent capitalize">{user.username}</span>
-        </h1>
-        {activePath ? (
-          <p className="text-muted-foreground text-lg">
-            You are <span className="text-foreground font-semibold">{activePath.overallCompletion}%</span> through "{activePath.title}"
-          </p>
-        ) : (
-          <p className="text-muted-foreground text-lg">
-            Ready to start a new neural path?
-          </p>
-        )}
-      </div>
+  const statStrip = (
+    <div className="flex items-center gap-1 h-8 px-1.5 rounded-md bg-white/3 border border-white/5 text-[11px] flex-wrap backdrop-blur-sm">
+      {stats.map((s, i) => (
+        <span key={s.label} className="flex items-center gap-1.5 px-2">
+          {i > 0 && <span className="w-px h-3 bg-white/8 -mx-1" />}
+          <s.icon size={11} className={s.color} />
+          <span className="text-muted-foreground">{s.label}</span>
+          <span className="text-foreground font-semibold tabular-nums">{s.value}</span>
+        </span>
+      ))}
+    </div>
+  );
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {stats.map((stat) => (
-          <div key={stat.label} className="glass rounded-xl p-4 flex items-center gap-4 glow-border">
-            <div className={`p-2 rounded-lg bg-white/5 ${stat.color}`}>
-              <stat.icon size={18} />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">{stat.label}</p>
-              <p className="text-sm font-semibold text-foreground">{stat.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
+  const subtitle = activePath
+    ? `${activePath.overallCompletion}% through ${activePath.title}`
+    : "Welcome back to your workspace";
+
+  const avatarEl = user.avatar ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={user.avatar}
+      alt=""
+      className="h-8 w-8 rounded-full object-cover bg-white/5 shrink-0"
+    />
+  ) : (
+    <div
+      aria-hidden="true"
+      className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-tr from-primary to-accent flex items-center justify-center text-[12px] font-bold text-background"
+    >
+      {(user.username?.[0] ?? "U").toUpperCase()}
+    </div>
+  );
+
+  return (
+    <PageHeader
+      title={`${greeting}, ${user.username}`}
+      subtitle={subtitle}
+      actions={
+        <div className="flex items-center gap-3">
+          {avatarEl}
+          {statStrip}
+        </div>
+      }
+    />
   );
 }

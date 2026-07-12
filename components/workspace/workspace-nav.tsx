@@ -26,87 +26,111 @@ import {
   ChevronRight,
   Pin,
   Shield,
+  Circle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ROLE_HIERARCHY, type Role } from "@/types";
 import { useWorkspace } from "./workspace-context";
-import Logo from "@/components/logo";
+import { useIsMobile } from "./use-is-mobile";
+import type { NavItemDTO, NavSectionDTO } from "@/app/api/navigation/route";
 
 // ─── Nav item types ───────────────────────────────────────────
 
 type LucideIcon = React.ComponentType<{ size?: number; className?: string; "aria-hidden"?: boolean | "true" | "false" }>;
 
-interface NavItem {
-  id: string;
-  icon: LucideIcon;
-  label: string;
-  href: string;
-  color?: string;
-  shortcut?: string;
-  adminOnly?: boolean;
+type NavItem = NavItemDTO;
+
+/**
+ * Registry mapping nav-config icon names to lucide components.
+ * The config is served as plain data, so icons resolve client-side.
+ */
+const ICON_MAP: Record<string, LucideIcon> = {
+  Home,
+  Compass,
+  Zap,
+  LayoutGrid,
+  MonitorPlay,
+  Route,
+  TrendingUp,
+  Trophy,
+  User,
+  Settings,
+  Shield,
+  Atom,
+  Leaf,
+  FlaskConical,
+  Pi,
+  Brain,
+  Cpu,
+  Dna,
+  Telescope,
+};
+
+/**
+ * Permission gate for a nav item. A null role (role not yet resolved) is
+ * treated permissively — every item shows until the server provides a role.
+ */
+function hasRoleAccess(item: NavItem, role: Role | null): boolean {
+  if (!item.roles || item.roles.length === 0) return true;
+  if (!role) return true;
+  const required = Math.min(...item.roles.map((r) => ROLE_HIERARCHY[r]));
+  return ROLE_HIERARCHY[role] >= required;
 }
 
-interface NavSection {
-  id: string;
-  title: string;
-  items: NavItem[];
-}
+// ─── Fallback config (used until /api/navigation resolves) ────
 
-// ─── Navigation config ────────────────────────────────────────
-
-const NAV_SECTIONS: NavSection[] = [
+const FALLBACK_SECTIONS: NavSectionDTO[] = [
   {
     id: "home",
     title: "HOME",
-    items: [
-      { id: "home", icon: Home, label: "Home", href: "/dashboard" },
-    ],
+    items: [{ id: "home", label: "Home", icon: "Home", href: "/dashboard" }],
   },
   {
     id: "learning",
     title: "LEARNING",
     items: [
-      { id: "neural-paths", icon: Route,    label: "Neural Paths", href: "/dashboard/neural-paths", color: "text-purple-400" },
-      { id: "explore",      icon: Compass,  label: "Explore",      href: "/dashboard/explore",      color: "text-cyan-400" },
+      { id: "neural-paths", label: "Neural Paths", icon: "Route", href: "/dashboard/neural-paths", color: "text-purple-400" },
+      { id: "explore", label: "Explore", icon: "Compass", href: "/dashboard/explore", color: "text-cyan-400" },
     ],
   },
   {
     id: "labs",
     title: "LABS",
     items: [
-      { id: "physics",     icon: Atom,        label: "Physics",       href: "/dashboard/simulations", color: "text-blue-400" },
-      { id: "biology",     icon: Leaf,        label: "Biology",       href: "/dashboard/simulations", color: "text-green-400" },
-      { id: "chemistry",   icon: FlaskConical,label: "Chemistry",     href: "/dashboard/simulations", color: "text-yellow-400" },
-      { id: "mathematics", icon: Pi,          label: "Mathematics",   href: "/dashboard/explore",     color: "text-purple-400" },
-      { id: "ai",          icon: Brain,       label: "AI",            href: "/dashboard/explore",     color: "text-indigo-400" },
-      { id: "anatomy",     icon: Dna,         label: "Human Anatomy", href: "/dashboard/simulations/anatomy-3d", color: "text-red-400" },
-      { id: "astronomy",   icon: Telescope,   label: "Astronomy",     href: "/dashboard/explore",     color: "text-cyan-400" },
-      { id: "technology",  icon: Cpu,         label: "Technology",    href: "/dashboard/explore",     color: "text-orange-400" },
+      { id: "physics", label: "Physics", icon: "Atom", href: "/dashboard/simulations", color: "text-blue-400" },
+      { id: "biology", label: "Biology", icon: "Leaf", href: "/dashboard/simulations", color: "text-green-400" },
+      { id: "chemistry", label: "Chemistry", icon: "FlaskConical", href: "/dashboard/simulations", color: "text-yellow-400" },
+      { id: "mathematics", label: "Mathematics", icon: "Pi", href: "/dashboard/explore", color: "text-purple-400" },
+      { id: "ai", label: "AI", icon: "Brain", href: "/dashboard/explore", color: "text-indigo-400" },
+      { id: "anatomy", label: "Human Anatomy", icon: "Dna", href: "/dashboard/simulations/anatomy-3d", color: "text-red-400" },
+      { id: "astronomy", label: "Astronomy", icon: "Telescope", href: "/dashboard/explore", color: "text-cyan-400" },
+      { id: "technology", label: "Technology", icon: "Cpu", href: "/dashboard/explore", color: "text-orange-400" },
     ],
   },
   {
     id: "spark",
     title: "SPARK",
     items: [
-      { id: "spark",       icon: Zap,          label: "Conversations", href: "/dashboard/spark",         color: "text-amber-400" },
-      { id: "matrix",      icon: LayoutGrid,   label: "Knowledge Matrix", href: "/dashboard/matrix",    color: "text-indigo-400" },
-      { id: "simulations", icon: MonitorPlay,  label: "Simulations",   href: "/dashboard/simulations",  color: "text-blue-400" },
+      { id: "spark", label: "Conversations", icon: "Zap", href: "/dashboard/spark", color: "text-amber-400" },
+      { id: "matrix", label: "Knowledge Matrix", icon: "LayoutGrid", href: "/dashboard/matrix", color: "text-indigo-400" },
+      { id: "simulations", label: "Simulations", icon: "MonitorPlay", href: "/dashboard/simulations", color: "text-blue-400" },
     ],
   },
   {
     id: "analytics",
     title: "ANALYTICS",
     items: [
-      { id: "evolution",    icon: TrendingUp, label: "Evolution",    href: "/dashboard/evolution",    color: "text-emerald-400" },
-      { id: "achievements", icon: Trophy,     label: "Achievements", href: "/dashboard/achievements", color: "text-amber-400" },
+      { id: "evolution", label: "Evolution", icon: "TrendingUp", href: "/dashboard/evolution", color: "text-emerald-400" },
+      { id: "achievements", label: "Achievements", icon: "Trophy", href: "/dashboard/achievements", color: "text-amber-400" },
     ],
   },
   {
     id: "system",
     title: "SYSTEM",
     items: [
-      { id: "profile",  icon: User,    label: "Profile",  href: "/dashboard/profile" },
-      { id: "settings", icon: Settings,label: "Settings", href: "/dashboard/settings" },
-      { id: "admin",    icon: Shield,  label: "Admin",    href: "/dashboard/admin",   adminOnly: true },
+      { id: "profile", label: "Profile", icon: "User", href: "/dashboard/profile" },
+      { id: "settings", label: "Settings", icon: "Settings", href: "/dashboard/settings" },
+      { id: "admin", label: "Admin", icon: "Shield", href: "/dashboard/admin", roles: ["admin"] },
     ],
   },
 ];
@@ -127,12 +151,14 @@ interface NavItemRowProps {
   item: NavItem;
   isActive: boolean;
   collapsed: boolean;
+  showLabels: boolean;
   isPinned: boolean;
   onTogglePin: (id: string) => void;
 }
 
-function NavItemRow({ item, isActive, collapsed, isPinned, onTogglePin }: NavItemRowProps) {
+function NavItemRow({ item, isActive, collapsed, showLabels, isPinned, onTogglePin }: NavItemRowProps) {
   const [hovered, setHovered] = useState(false);
+  const Icon = ICON_MAP[item.icon] ?? Circle;
 
   return (
     <div
@@ -145,7 +171,7 @@ function NavItemRow({ item, isActive, collapsed, isPinned, onTogglePin }: NavIte
         aria-label={item.label}
         aria-current={isActive ? "page" : undefined}
         className={cn(
-          "flex items-center gap-2.5 rounded-md transition-all duration-150",
+          "flex items-center gap-2.5 rounded-md transition-all duration-150 relative",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
           collapsed ? "w-9 h-9 justify-center mx-auto" : "px-2.5 py-1.5 w-full",
           isActive
@@ -153,7 +179,15 @@ function NavItemRow({ item, isActive, collapsed, isPinned, onTogglePin }: NavIte
             : "text-muted-foreground/70 hover:text-foreground hover:bg-white/4"
         )}
       >
-        <item.icon
+        {/* Left accent indicator for the active item (expanded only) */}
+        {showLabels && isActive && (
+          <span
+            className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[2px] rounded-r bg-primary"
+            aria-hidden="true"
+          />
+        )}
+
+        <Icon
           size={15}
           className={cn(
             "shrink-0 transition-colors",
@@ -161,16 +195,10 @@ function NavItemRow({ item, isActive, collapsed, isPinned, onTogglePin }: NavIte
           )}
           aria-hidden="true"
         />
-        {!collapsed && (
+        {showLabels && (
           <span className="text-[12px] font-medium truncate flex-1">
             {item.label}
           </span>
-        )}
-        {!collapsed && isActive && (
-          <span
-            className="w-1 h-1 rounded-full bg-primary shrink-0"
-            aria-hidden="true"
-          />
         )}
       </Link>
 
@@ -214,12 +242,39 @@ function NavItemRow({ item, isActive, collapsed, isPinned, onTogglePin }: NavIte
 // ─── WorkspaceNav ─────────────────────────────────────────────
 
 export function WorkspaceNav() {
-  const { navCollapsed, toggleNav, setNavCollapsed } = useWorkspace();
+  const {
+    navCollapsed,
+    toggleNav,
+    mobileNavOpen,
+    setMobileNavOpen,
+    role,
+  } = useWorkspace();
   const pathname = usePathname();
+  const isMobile = useIsMobile();
+  const showLabels = !navCollapsed || isMobile;
   const [pinned, setPinned] = useState<string[]>([]);
+  const [sections, setSections] = useState<NavSectionDTO[]>(FALLBACK_SECTIONS);
 
-  // Load pins
+  // Load pins — lazy client-only read to avoid hydration mismatch
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setPinned(loadPins()); }, []);
+
+  // Fetch nav config from the API; fall back to the static config on failure.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/navigation", { credentials: "include" })
+      .then((res) => res.json())
+      .then((payload) => {
+        if (cancelled) return;
+        if (payload?.success && Array.isArray(payload?.data?.sections)) {
+          setSections(payload.data.sections);
+        }
+      })
+      .catch(() => {
+        /* keep fallback config */
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // Keyboard shortcut [ to toggle
   useEffect(() => {
@@ -247,114 +302,143 @@ export function WorkspaceNav() {
       ? pathname === "/dashboard"
       : pathname.startsWith(href);
 
-  // Build pinned items list (order preserved)
-  const allItems = NAV_SECTIONS.flatMap((s) => s.items);
+  // Build permission-filtered section + pinned lists
+  const accessibleSections = sections.map((s) => ({
+    ...s,
+    items: s.items.filter((i) => hasRoleAccess(i, role)),
+  })).filter((s) => s.items.length > 0);
+
+  const allItems = sections.flatMap((s) => s.items);
   const pinnedItems = pinned
     .map((id) => allItems.find((i) => i.id === id))
-    .filter((i): i is NavItem => !!i);
+    .filter((i): i is NavItem => !!i && hasRoleAccess(i, role));
+
+  // Tooltip/icon-rail state: only on desktop when the column is collapsed.
+  const drawerCollapsed = !isMobile && navCollapsed;
 
   return (
-    <nav
-      aria-label="Primary navigation"
-      className={cn(
-        "sci-nav flex-shrink-0 select-none",
-        "transition-[width] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
-        navCollapsed
-          ? "w-[var(--nav-collapsed-width)]"
-          : "w-[var(--nav-expanded-width)]"
-      )}
-    >
-      {/* ── Logo row (collapsed = icon only) ── */}
-      <div
-        className={cn(
-          "flex items-center h-10 border-b border-white/5 shrink-0 overflow-hidden",
-          navCollapsed ? "justify-center px-0" : "px-3 gap-2"
-        )}
-      >
-        {!navCollapsed && (
-          <span className="text-[11px] font-bold text-foreground/80 tracking-wider truncate">
-            NEURON
-          </span>
-        )}
-      </div>
-
-      {/* ── Scrollable nav body ── */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none py-2 px-1.5 space-y-4">
-
-        {/* Pinned section */}
-        {pinnedItems.length > 0 && (
-          <div>
-            {!navCollapsed && (
-              <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/30 font-semibold px-2 mb-1">
-                PINNED
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {pinnedItems.map((item) => (
-                <NavItemRow
-                  key={item.id}
-                  item={item}
-                  isActive={isActive(item.href)}
-                  collapsed={navCollapsed}
-                  isPinned={true}
-                  onTogglePin={handleTogglePin}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* All sections */}
-        {NAV_SECTIONS.map((section) => (
-          <div key={section.id}>
-            {!navCollapsed && (
-              <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/30 font-semibold px-2 mb-1">
-                {section.title}
-              </p>
-            )}
-            <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <NavItemRow
-                  key={item.id}
-                  item={item}
-                  isActive={isActive(item.href)}
-                  collapsed={navCollapsed}
-                  isPinned={pinned.includes(item.id)}
-                  onTogglePin={handleTogglePin}
-                />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* ── Collapse toggle ── */}
-      <div className="border-t border-white/5 p-1.5 shrink-0">
+    <>
+      {/* Mobile backdrop — taps close the overlay drawer */}
+      {mobileNavOpen && (
         <button
           type="button"
-          onClick={toggleNav}
+          aria-label="Close navigation"
+          onClick={() => setMobileNavOpen(false)}
+          className="fixed inset-0 z-[1400] bg-black/60 backdrop-blur-sm md:hidden"
+        />
+      )}
+
+      <nav
+        id="primary-navigation"
+        aria-label="Primary navigation"
+        className={cn(
+          "sci-nav flex-shrink-0 select-none z-[1500]",
+          // Mobile: fixed overlay drawer, always expanded width
+          "fixed inset-y-0 left-0",
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full",
+          "w-[var(--nav-expanded-width)]",
+          // Desktop: static flex column, width follows collapse state
+          "md:static md:z-auto md:translate-x-0",
+          navCollapsed
+            ? "md:w-[var(--nav-collapsed-width)]"
+            : "md:w-[var(--nav-expanded-width)]",
+          "transition-[width,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        )}
+      >
+        {/* ── Logo row (collapsed = icon only) ── */}
+        <div
           className={cn(
-            "flex items-center gap-2 w-full rounded-md px-2 py-2",
-            "text-muted-foreground/40 hover:text-muted-foreground",
-            "hover:bg-white/4 transition-colors duration-150",
-            "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
-            navCollapsed && "justify-center"
+            "flex items-center h-10 border-b border-white/5 shrink-0 overflow-hidden",
+            showLabels ? "px-3 gap-2" : "justify-center px-0"
           )}
-          title={navCollapsed ? "Expand navigation ([)" : "Collapse navigation ([)"}
-          aria-label={navCollapsed ? "Expand navigation" : "Collapse navigation"}
-          aria-keyshortcuts="["
         >
-          {navCollapsed ? (
-            <ChevronRight size={13} />
-          ) : (
-            <>
-              <ChevronLeft size={13} />
-              <span className="text-[11px]">Collapse</span>
-              <kbd className="ml-auto text-[9px] border border-white/8 rounded px-1">[</kbd>
-            </>
+          {showLabels && (
+            <span className="text-[11px] font-bold text-foreground/80 tracking-wider truncate">
+              NEURON
+            </span>
           )}
-        </button>
-      </div>
-    </nav>
+        </div>
+
+        {/* ── Scrollable nav body ── */}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-none py-2 px-1.5 space-y-4">
+
+          {/* Pinned section */}
+          {pinnedItems.length > 0 && (
+            <div>
+              {showLabels && (
+                <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/30 font-semibold px-2 mb-1">
+                  PINNED
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {pinnedItems.map((item) => (
+                  <NavItemRow
+                    key={item.id}
+                    item={item}
+                    isActive={isActive(item.href)}
+                    collapsed={drawerCollapsed}
+                    showLabels={showLabels}
+                    isPinned={true}
+                    onTogglePin={handleTogglePin}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* All sections */}
+          {accessibleSections.map((section) => (
+            <div key={section.id}>
+              {showLabels && (
+                <p className="text-[9px] uppercase tracking-[0.2em] text-muted-foreground/30 font-semibold px-2 mb-1">
+                  {section.title}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {section.items.map((item) => (
+                  <NavItemRow
+                    key={item.id}
+                    item={item}
+                    isActive={isActive(item.href)}
+                    collapsed={drawerCollapsed}
+                    showLabels={showLabels}
+                    isPinned={pinned.includes(item.id)}
+                    onTogglePin={handleTogglePin}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Collapse toggle ── */}
+        <div className="border-t border-white/5 p-1.5 shrink-0">
+          <button
+            type="button"
+            onClick={toggleNav}
+            className={cn(
+              "flex items-center gap-2 w-full rounded-md px-2 py-2",
+              "text-muted-foreground/40 hover:text-muted-foreground",
+              "hover:bg-white/4 transition-colors duration-150",
+              "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40",
+              !showLabels && "justify-center"
+            )}
+            title={navCollapsed ? "Expand navigation ([)" : "Collapse navigation ([)"}
+            aria-label={navCollapsed ? "Expand navigation" : "Collapse navigation"}
+            aria-keyshortcuts="["
+          >
+            {!showLabels ? (
+              <ChevronRight size={13} />
+            ) : (
+              <>
+                <ChevronLeft size={13} />
+                <span className="text-[11px]">Collapse</span>
+                <kbd className="ml-auto text-[9px] border border-white/8 rounded px-1">[</kbd>
+              </>
+            )}
+          </button>
+        </div>
+      </nav>
+    </>
   );
 }

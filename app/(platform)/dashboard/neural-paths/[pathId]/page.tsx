@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2, ArrowLeft, Play, Lock, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import { PageHeader } from "@/components/workspace/page-header";
 
 export default function PathDetailsPage() {
   const params = useParams();
@@ -60,28 +61,23 @@ export default function PathDetailsPage() {
           <ArrowLeft size={16} /> Back to Paths
         </Link>
         
-        <div className="glass rounded-2xl p-8 glow-border">
-          <div className="flex items-start justify-between">
-            <div>
-              <span className="text-[10px] uppercase tracking-widest font-semibold text-primary/80 mb-2 block">{pathData.category}</span>
-              <h1 className="text-3xl font-bold text-foreground mb-4">{pathData.title}</h1>
-              <p className="text-muted-foreground mb-6">{pathData.description}</p>
-              
-              <div className="flex items-center gap-4 text-sm">
-                <span className="bg-primary/10 text-primary px-3 py-1 rounded-full">{pathData.xpReward} XP</span>
-                <span className="bg-secondary/10 text-secondary px-3 py-1 rounded-full capitalize">{pathData.difficulty}</span>
-                <span className="text-muted-foreground">{pathData.overallCompletion}% Completed</span>
+        <PageHeader
+          breadcrumbs={[{ label: "Neural Paths", href: "/dashboard/neural-paths" }]}
+          title={pathData.title}
+          subtitle={`${pathData.category} · ${pathData.description}`}
+          actions={
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-sm">{pathData.xpReward} XP</span>
+                <span className="bg-secondary/10 text-secondary px-3 py-1 rounded-full capitalize text-sm">{pathData.difficulty}</span>
+                <span className="text-sm text-muted-foreground">{pathData.overallCompletion}% Completed</span>
               </div>
-            </div>
-            
-            <div className="hidden md:block">
-              {/* Progress Circle Visual */}
-              <div className="w-24 h-24 rounded-full border-4 border-primary/20 flex items-center justify-center relative">
+              <div className="hidden md:flex w-24 h-24 rounded-full border-4 border-primary/20 flex items-center justify-center shrink-0">
                 <span className="text-lg font-bold text-foreground">{pathData.overallCompletion}%</span>
               </div>
             </div>
-          </div>
-        </div>
+          }
+        />
 
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-foreground mb-6">Curriculum</h2>

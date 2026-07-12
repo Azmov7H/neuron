@@ -13,6 +13,7 @@ import {
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { PageHeader } from "@/components/workspace/page-header";
 
 export default function ProfilePage() {
   const [profileData, setProfileData] = useState<any>(null);
@@ -122,46 +123,40 @@ export default function ProfilePage() {
   return (
     <div className="space-y-8 p-6">
       {/* Hero Section */}
-      <Card className="border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-black">
-        <CardContent className="p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center">
-            <div className="flex h-28 w-28 items-center justify-center rounded-full border border-yellow-500/30 bg-yellow-500/10">
-              <Brain className="h-12 w-12 text-yellow-400" />
-            </div>
-
-            <div className="flex-1">
-              <h1 className="text-4xl font-bold capitalize">{user.username || "Anonymous"}</h1>
-
-              <p className="mt-2 text-muted-foreground">
-                {user.rank || "Observer"} • Cognitive Explorer
-              </p>
-
-              <div className="mt-6">
-                <div className="mb-2 flex items-center justify-between text-sm">
-                  <span>Level {level}</span>
-                  <span>{totalXP.toLocaleString()} XP</span>
-                </div>
-
-                <Progress value={progressPercent} />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <StatCard
-                icon={<Award />}
-                value={user.rank || "Observer"}
-                label="Current Rank"
-              />
-
-              <StatCard
-                icon={<Flame />}
-                value={`${user.streak || 0} Days`}
-                label="Streak"
-              />
-            </div>
+      <PageHeader
+        title={(user.username || "Anonymous").replace(/^\w/, (c: string) => c.toUpperCase())}
+        subtitle={`${user.rank || "Observer"} • Cognitive Explorer`}
+        actions={
+          <div className="flex h-20 w-20 items-center justify-center rounded-full border border-yellow-500/30 bg-yellow-500/10">
+            <Brain className="h-10 w-10 text-yellow-400" />
           </div>
-        </CardContent>
-      </Card>
+        }
+      />
+
+      <div className="flex flex-col gap-4 rounded-xl border border-yellow-500/20 bg-gradient-to-br from-yellow-500/10 to-black p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex-1">
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <span>Level {level}</span>
+            <span>{totalXP.toLocaleString()} XP</span>
+          </div>
+
+          <Progress value={progressPercent} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <StatCard
+            icon={<Award />}
+            value={user.rank || "Observer"}
+            label="Current Rank"
+          />
+
+          <StatCard
+            icon={<Flame />}
+            value={`${user.streak || 0} Days`}
+            label="Streak"
+          />
+        </div>
+      </div>
 
       {/* Main Stats */}
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

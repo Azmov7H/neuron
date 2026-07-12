@@ -19,7 +19,6 @@ import {
   Leaf,
   Pi,
   Brain,
-  Globe,
   Cpu,
   Dna,
   Telescope,
@@ -93,19 +92,62 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const [recent, setRecent] = useState<string[]>([]);
+  const [knowledgeItems, setKnowledgeItems] = useState<CommandItem[]>([]);
+  const [searching, setSearching] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // Load recent on mount
+  // Load recent on open — lazy client-only read to avoid hydration mismatch
   useEffect(() => {
     if (open) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRecent(loadRecent());
       setQuery("");
       setSelected(0);
+      setKnowledgeItems([]);
       setTimeout(() => inputRef.current?.focus(), 30);
     }
   }, [open]);
+
+  // Debounced knowledge search against the API
+  useEffect(() => {
+    if (!open) return;
+    const q = query.trim();
+    if (!q) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setKnowledgeItems([]);
+      return;
+    }
+    setSearching(true);
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/knowledge/search?q=${encodeURIComponent(q)}&limit=6`,
+          { credentials: "include" }
+        );
+        const payload = await res.json();
+        const hits = payload?.success ? (payload?.data?.results ?? []) : [];
+        setKnowledgeItems(
+          hits.slice(0, 6).map((r: { id: string; title: string; kind: string; domain: string }) => ({
+            id: `kb-${r.id}`,
+            label: r.title,
+            description: `${r.kind} · ${r.domain}`,
+            icon: Search,
+            href: `/dashboard/explore?q=${encodeURIComponent(q)}`,
+            category: "Knowledge",
+            color: "text-cyan-400",
+            keywords: [r.kind, r.domain],
+          }))
+        );
+      } catch {
+        setKnowledgeItems([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [query, open]);
 
   // Filtered + grouped results
   const results: CommandItem[] = React.useMemo(() => {
@@ -117,14 +159,15 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
         .filter((c): c is CommandItem => !!c);
       return recentItems.length > 0 ? recentItems : ALL_COMMANDS.slice(0, 8);
     }
-    return ALL_COMMANDS.filter(
+    const filtered = ALL_COMMANDS.filter(
       (c) =>
         c.label.toLowerCase().includes(q) ||
         (c.description ?? "").toLowerCase().includes(q) ||
         (c.keywords ?? []).some((k) => k.includes(q)) ||
         c.category.toLowerCase().includes(q)
     );
-  }, [query, recent]);
+    return [...filtered, ...knowledgeItems];
+  }, [query, recent, knowledgeItems]);
 
   const execute = useCallback(
     (item: CommandItem) => {
@@ -210,12 +253,17 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
             type="text"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setSelected(0); }}
-            placeholder="Search pages, labs, commands…"
+            placeholder="Search pages, labs, knowledge…"
             className="flex-1 bg-transparent text-[13px] text-foreground placeholder:text-muted-foreground/50 outline-none"
             aria-label="Command search"
             autoComplete="off"
             spellCheck={false}
           />
+          {searching && (
+            <span className="text-[10px] text-muted-foreground/50 animate-pulse shrink-0">
+              Searching…
+            </span>
+          )}
           <kbd className="text-[10px] text-muted-foreground/50 border border-white/8 rounded px-1.5 py-0.5">
             ESC
           </kbd>

@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import type { Role } from "@/types";
 
 // ─── Types ────────────────────────────────────────────────────
 
@@ -16,6 +17,7 @@ export interface DockItem {
   status: "running" | "paused" | "done" | "error";
   progress?: number; // 0-100
   icon?: React.ReactNode;
+  href?: string;
 }
 
 interface WorkspaceContextValue {
@@ -29,10 +31,15 @@ interface WorkspaceContextValue {
   removeDockItem: (id: string) => void;
   updateDockItem: (id: string, patch: Partial<DockItem>) => void;
 
-  /** Navigation collapse state */
+  /** Navigation collapse state (desktop expanded / icon-rail) */
   navCollapsed: boolean;
   toggleNav: () => void;
   setNavCollapsed: (v: boolean) => void;
+
+  /** Mobile navigation drawer (overlay) state */
+  mobileNavOpen: boolean;
+  setMobileNavOpen: (v: boolean) => void;
+  toggleMobileNav: () => void;
 
   /** Context panel visibility */
   contextPanelOpen: boolean;
@@ -41,6 +48,15 @@ interface WorkspaceContextValue {
   /** Bottom dock expanded state */
   dockExpanded: boolean;
   setDockExpanded: (v: boolean) => void;
+
+  /** Resolved role for the current session (null = unknown / permissive) */
+  role: Role | null;
+}
+
+interface WorkspaceProviderProps {
+  children: React.ReactNode;
+  /** Role resolved server-side and injected into the shell */
+  role?: Role | null;
 }
 
 // ─── Context ──────────────────────────────────────────────────
@@ -51,11 +67,15 @@ const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 const NAV_COLLAPSED_KEY = "sci-nav-collapsed";
 
-export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+export function WorkspaceProvider({
+  children,
+  role = null,
+}: WorkspaceProviderProps) {
   const [contextPanelContent, setContextPanelContent] =
     useState<React.ReactNode>(null);
   const [dockItems, setDockItems] = useState<DockItem[]>([]);
   const [navCollapsed, setNavCollapsed] = useState<boolean>(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
   const [contextPanelOpen, setContextPanelOpen] = useState<boolean>(false);
   const [dockExpanded, setDockExpanded] = useState<boolean>(false);
 
@@ -63,6 +83,8 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(NAV_COLLAPSED_KEY);
+      // Lazy client-only read: avoids hydration mismatch by deferring to post-mount
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       if (stored !== null) setNavCollapsed(stored === "true");
     } catch {
       /* localStorage unavailable in SSR */
@@ -81,6 +103,10 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const toggleNav = useCallback(() => {
     handleSetNavCollapsed(!navCollapsed);
   }, [navCollapsed, handleSetNavCollapsed]);
+
+  const toggleMobileNav = useCallback(() => {
+    setMobileNavOpen((o) => !o);
+  }, []);
 
   const addDockItem = useCallback((item: DockItem) => {
     setDockItems((prev) => {
@@ -114,10 +140,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         navCollapsed,
         toggleNav,
         setNavCollapsed: handleSetNavCollapsed,
+        mobileNavOpen,
+        setMobileNavOpen,
+        toggleMobileNav,
         contextPanelOpen,
         setContextPanelOpen,
         dockExpanded,
         setDockExpanded,
+        role,
       }}
     >
       {children}

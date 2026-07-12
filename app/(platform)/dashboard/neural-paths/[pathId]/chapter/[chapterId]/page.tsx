@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2, ArrowLeft, Zap, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
+import { PageHeader } from "@/components/workspace/page-header";
 
 export default function ChapterViewPage() {
   const params = useParams();
@@ -92,35 +93,39 @@ export default function ChapterViewPage() {
           <ArrowLeft size={16} /> Back to Path Curriculum
         </Link>
         
-        <div className="glass rounded-2xl p-10 glow-border">
-          <div className="mb-8">
-            <span className="text-[10px] uppercase tracking-widest font-semibold text-primary/80 mb-2 block">Chapter {chapterData.order}</span>
-            <h1 className="text-3xl font-bold text-foreground mb-4">{chapterData.title}</h1>
-            <p className="text-muted-foreground text-lg">{chapterData.description}</p>
+        <PageHeader
+          breadcrumbs={[
+            { label: "Neural Paths", href: "/dashboard/neural-paths" },
+            { label: pathData?.title ?? "Path", href: `/dashboard/neural-paths/${pathId}` },
+          ]}
+          title={chapterData.title}
+          subtitle={chapterData.description}
+          actions={
+            <span className="text-[10px] uppercase tracking-widest font-semibold text-primary/80 block">Chapter {chapterData.order}</span>
+          }
+        />
+
+        <div className="glass rounded-2xl p-10 glow-border space-y-6">
+          <div className="bg-white/5 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Learning Objectives</h3>
+            <ul className="space-y-2">
+              {chapterData.objectives.map((obj: string, i: number) => (
+                <li key={i} className="flex items-center gap-3 text-muted-foreground">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                  {obj}
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <div className="space-y-6">
-            <div className="bg-white/5 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Learning Objectives</h3>
-              <ul className="space-y-2">
-                {chapterData.objectives.map((obj: string, i: number) => (
-                  <li key={i} className="flex items-center gap-3 text-muted-foreground">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    {obj}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="bg-white/5 rounded-xl p-6">
-              <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Key Concepts</h3>
-              <div className="flex flex-wrap gap-2">
-                {chapterData.concepts.map((concept: string, i: number) => (
-                  <span key={i} className="bg-secondary/10 text-secondary text-xs px-3 py-1 rounded-full">
-                    {concept}
-                  </span>
-                ))}
-              </div>
+          <div className="bg-white/5 rounded-xl p-6">
+            <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Key Concepts</h3>
+            <div className="flex flex-wrap gap-2">
+              {chapterData.concepts.map((concept: string, i: number) => (
+                <span key={i} className="bg-secondary/10 text-secondary text-xs px-3 py-1 rounded-full">
+                  {concept}
+                </span>
+              ))}
             </div>
           </div>
 
