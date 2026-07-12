@@ -57,7 +57,7 @@ function HomeContextPanel({ summary }: { summary: DashboardSummary }) {
         <div className="space-y-2">
           <p className="text-[11px] text-muted-foreground">{"Today's concept:"}</p>
           <p className="text-[12px] text-foreground font-medium leading-snug">
-            {"\"How does entropy shape the arrow of time?\""}
+            {'"How does entropy shape the arrow of time?"'}
           </p>
           <Link
             href="/dashboard/spark"
@@ -139,24 +139,41 @@ export default function DashboardPage() {
   const { user, activePath, weeklyStats, recentDiscoveries } = summary;
 
   return (
-    <div className="min-h-full p-6 space-y-6 animate-fade-in max-w-[1400px] mx-auto">
-      {/* ── Welcome Header Strip ── */}
+    <div className="min-h-full px-5 py-5 animate-fade-in max-w-[1400px] mx-auto">
+      {/* ── Row 1: Welcome header strip (full width) ── */}
       <NeuralWelcome user={user} activePath={activePath} />
 
-      {/* ── Main 2-column workspace ── */}
-      <div className="grid grid-cols-1 xl:grid-cols-5 gap-5">
-        {/* ── LEFT: Active learning surface (col-span 3) ── */}
-        <div className="xl:col-span-3 space-y-5">
+      {/* ── Row 2: Hero card (8) + Spark panel (4) ── */}
+      <div className="mt-5 grid grid-cols-12 gap-5">
+        <div className="col-span-12 lg:col-span-8">
           <ContinueLearning activePath={activePath} />
-          <ActiveNeuralPath activePath={activePath} />
-          <EvolutionProgress weeklyStats={weeklyStats} />
         </div>
-
-        {/* ── RIGHT: Activity feed & navigation (col-span 2) ── */}
-        <div className="xl:col-span-2 space-y-5">
+        <div className="col-span-12 lg:col-span-4">
           <SparkRecommendation />
+        </div>
+      </div>
+
+      {/* ── Row 3: Evolution stats (full width 3-col) ── */}
+      <div className="mt-5">
+        <EvolutionProgress weeklyStats={weeklyStats} />
+      </div>
+
+      {/* ── Row 4: Neural Path timeline (6) + Domain grid (6) ── */}
+      <div className="mt-5 grid grid-cols-12 gap-5">
+        <div className="col-span-12 lg:col-span-6">
+          <ActiveNeuralPath activePath={activePath} />
+        </div>
+        <div className="col-span-12 lg:col-span-6">
           <ExploreDomains />
+        </div>
+      </div>
+
+      {/* ── Row 5: Activity feed (8) + Quick launch (4) ── */}
+      <div className="mt-5 grid grid-cols-12 gap-5 pb-5">
+        <div className="col-span-12 lg:col-span-8">
           <RecentDiscoveries discoveries={recentDiscoveries} />
+        </div>
+        <div className="col-span-12 lg:col-span-4">
           <SimulationsPreview />
         </div>
       </div>
