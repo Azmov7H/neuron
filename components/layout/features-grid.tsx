@@ -1,5 +1,9 @@
+"use client";
+
 import { FeatureCard } from "./feature-card";
-import { KnowledgeMap } from "./knowledge-map"
+import { KnowledgeMap } from "./knowledge-map";
+import { useIntersection } from "@/hooks/use-intersection";
+import { cn } from "@/lib/utils";
 
 const features = [
   {
@@ -34,12 +38,45 @@ const features = [
   },
 ];
 
+function AnimatedSection({
+  children,
+  delay = 0,
+  className,
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  className?: string;
+}) {
+  const [ref, visible] = useIntersection<HTMLDivElement>({ threshold: 0.1 });
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "transition-all duration-700",
+        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6",
+        className
+      )}
+      style={{ transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  );
+}
+
 export function FeaturesGrid() {
+  const [headerRef, headerVisible] = useIntersection<HTMLDivElement>({ threshold: 0.2 });
+
   return (
     <section id="features" className="relative py-24 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         {/* Section Title */}
-        <div className="mb-16 text-center">
+        <div
+          ref={headerRef}
+          className={cn(
+            "mb-16 text-center transition-all duration-700",
+            headerVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
+          )}
+        >
           <span className="font-mono text-xs font-medium uppercase tracking-widest text-primary">
             Core Modules
           </span>
@@ -51,14 +88,16 @@ export function FeaturesGrid() {
           </p>
         </div>
 
-        {/* Feature Cards - First Row of 3 Cards */}
+        {/* Feature Cards */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {features.map((feature) => (
-            <FeatureCard key={feature.id} {...feature} />
+          {features.map((feature, i) => (
+            <AnimatedSection key={feature.id} delay={i * 100}>
+              <FeatureCard {...feature} />
+            </AnimatedSection>
           ))}
 
-          {/* Knowledge Map Card - Larger Size */}
-          <div className="md:col-span-2 lg:col-span-3">
+          {/* Knowledge Map Card */}
+          <AnimatedSection delay={300} className="md:col-span-2 lg:col-span-3">
             <div className="glow-border group relative overflow-hidden rounded-2xl border border-border bg-card p-0 transition-all duration-500 hover:border-primary/30">
               <div className="grid lg:grid-cols-2">
                 {/* Text Content */}
@@ -89,7 +128,7 @@ export function FeaturesGrid() {
                 </div>
               </div>
             </div>
-          </div>
+          </AnimatedSection>
         </div>
       </div>
     </section>

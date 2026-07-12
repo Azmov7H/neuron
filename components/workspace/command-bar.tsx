@@ -412,6 +412,12 @@ export function CommandBar() {
     }
   }, [router]);
 
+  // Build breadcrumb from current pathname
+  const segments = router && typeof window !== "undefined"
+    ? window.location.pathname.split("/").filter(Boolean)
+    : [];
+  const breadcrumbs = segments.slice(1); // drop "dashboard"
+
   return (
     <>
       <header
@@ -419,9 +425,9 @@ export function CommandBar() {
         role="banner"
         aria-label="Command bar"
       >
-        {/* ── Left: Mobile hamburger (mobile-only) + Logo + workspace ── */}
+        {/* ── Left: Mobile hamburger + Logo + breadcrumb ── */}
         <div className="flex items-center gap-2 sm:gap-3 mr-4 shrink-0">
-          {/* Mobile hamburger — opens the overlay nav drawer */}
+          {/* Mobile hamburger */}
           <button
             type="button"
             onClick={toggleMobileNav}
@@ -436,19 +442,29 @@ export function CommandBar() {
           <Link href="/dashboard" aria-label="Go to dashboard home">
             <Logo />
           </Link>
-          <div className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground/60">
-            <Circle size={4} fill="currentColor" className="text-primary/60" />
-            <span>Workspace</span>
-          </div>
+
+          {/* Breadcrumb trail */}
+          <nav aria-label="Breadcrumb" className="hidden sm:flex items-center gap-1 text-[11px] text-muted-foreground/50">
+            <Circle size={4} fill="currentColor" className="text-primary/50 shrink-0" />
+            <span className="text-muted-foreground/50">Workspace</span>
+            {breadcrumbs.map((seg, i) => (
+              <span key={i} className="flex items-center gap-1">
+                <span className="text-muted-foreground/25">›</span>
+                <span className={i === breadcrumbs.length - 1 ? "text-foreground/70 font-medium capitalize" : "capitalize"}>
+                  {seg.replace(/-/g, " ")}
+                </span>
+              </span>
+            ))}
+          </nav>
         </div>
 
-        {/* ── Center: Search ── */}
+        {/* ── Center: Search (wider) ── */}
         <div className="flex-1 flex justify-center">
           <button
             type="button"
             onClick={() => setPaletteOpen(true)}
             className={cn(
-              "flex items-center gap-2 h-7 w-full max-w-xs px-3 rounded",
+              "flex items-center gap-2 h-7 w-full max-w-sm px-3 rounded",
               "bg-white/4 border border-white/6 text-muted-foreground/60",
               "hover:bg-white/6 hover:border-white/10 hover:text-muted-foreground",
               "transition-all duration-150 text-[12px]",
