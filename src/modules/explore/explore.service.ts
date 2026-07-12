@@ -1,4 +1,7 @@
 import { ExploreActivity } from '@/database/models/explore-activity';
+import { NeuralPath } from '@/database/models/neural-path';
+import { RecommendationsService } from '@/modules/recommendations/recommendations.service';
+import { ExploreDomain, IRecommendation } from '@/types/explore';
 import mongoose from 'mongoose';
 
 // Static seed data to replace frontend mocks while maintaining a basic integration
@@ -14,47 +17,45 @@ const SEED_DOMAINS = [
 ];
 
 const SEED_CONCEPTS = [
-  "Entropy", "Neural Networks", "Dark Matter", "Emergence", "Quantum Tunneling", 
+  "Entropy", "Neural Networks", "Dark Matter", "Emergence", "Quantum Tunneling",
   "Blockchains", "Epigenetics", "String Theory", "Teleology", "Superposition"
 ];
 
-const SEED_RECOMMENDATIONS = [
-  { title: "The Nature of Computation", desc: "Bridge between physics and computer science.", type: "Concept" },
-  { title: "Neural Darwinism", desc: "How neuronal groups evolve through selection.", type: "Theory" },
-  { title: "Quantum Biology", desc: "Quantum effects in biological processes.", type: "Domain" },
-];
-
 export class ExploreService {
-  static async getDomains() {
-    return SEED_DOMAINS;
+  static async getDomains(): Promise<ExploreDomain[]> {
+    return Promise.all(
+      SEED_DOMAINS.map(async (domain) => {
+        const pathCount = await NeuralPath.countDocuments({
+          domain: { $regex: new RegExp(`^${domain.name}$`, 'i') },
+          isActive: true,
+        });
+        return { ...domain, pathCount };
+      })
+    );
   }
 
   static async getConcepts() {
     return SEED_CONCEPTS; // Could be paginated/filtered in real scenario
   }
 
-  static async getTrendingConcepts() {
-    // In a fully dynamic system, this would aggregate ExploreActivity targetIds where action = 'view_concept'
-    // For now, we return the seeded list.
-    return SEED_CONCEPTS;
+  static async getTrendingConcepts(): Promise<string[]> {
+    const aggregated = await ExploreActivity.aggregate([
+      { $match: { action: 'view_concept' } },
+      { $group: { _id: '$targetId', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
+    ]);
+
+    const trending = aggregated.map((a: { _id: string }) => a._id).filter(Boolean);
+    return trending.length > 0 ? trending : SEED_CONCEPTS;
   }
 
-  static async getRecommendations(userId: string) {
-    // Fetch user recent activity to potentially alter recommendations
-    const recentActivity = await ExploreActivity.find({ userId: new mongoose.Types.ObjectId(userId) })
-      .sort({ createdAt: -1 })
-      .limit(10)
-      .lean();
-
-    // If no real AI engine, return the static seeds as personalized fallback
-    return SEED_RECOMMENDATIONS.map(rec => ({
-      ...rec,
-      // Just a simple tweak based on activity presence
-      desc: recentActivity.length > 0 ? `${rec.desc} (Based on your history)` : rec.desc
-    }));
+  static async getRecommendations(userId: string): Promise<IRecommendation[]> {
+    // Delegate to the real recommendation engine (AI-aware, cached).
+    return RecommendationsService.getRecommendations(userId);
   }
 
-  static async logActivity(userId: string, action: string, targetId: string, metadata?: any) {
+  static async logActivity(userId: string, action: string, targetId: string, metadata?: Record<string, unknown>) {
     const activity = await ExploreActivity.create({
       userId: new mongoose.Types.ObjectId(userId),
       action,
@@ -62,6 +63,13 @@ export class ExploreService {
       metadata
     });
     return activity;
+  }
+
+  static async getRecentActivity(userId: string, limit = 10) {
+    return ExploreActivity.find({ userId: new mongoose.Types.ObjectId(userId) })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
   }
 
   static async getNavigationConfig() {
@@ -72,7 +80,7 @@ export class ExploreService {
           title: "Domains of Knowledge",
           description: "Explore fundamental reality and mind.",
           icon: "Atom",
-          route: "/dashboard/explore/domains",
+          route: "/dashboard/explore#domains",
           type: "domain",
           isActive: true
         },
@@ -81,7 +89,7 @@ export class ExploreService {
           title: "Trending Concepts",
           description: "Current trending neural concepts.",
           icon: "TrendingUp",
-          route: "/dashboard/explore/trending",
+          route: "/dashboard/explore#trending",
           type: "concept",
           isActive: true
         },
@@ -90,7 +98,7 @@ export class ExploreService {
           title: "Recommended For You",
           description: "Personalized exploration paths.",
           icon: "Sparkles",
-          route: "/dashboard/explore/recommendations",
+          route: "/dashboard/explore#recommendations",
           type: "tool",
           isActive: true
         },
@@ -99,7 +107,7 @@ export class ExploreService {
           title: "Featured Neural Paths",
           description: "Curated learning journeys.",
           icon: "Route",
-          route: "/dashboard/explore/featured",
+          route: "/dashboard/explore#featured",
           type: "path",
           isActive: true
         },
@@ -108,7 +116,7 @@ export class ExploreService {
           title: "Knowledge Connections",
           description: "Discover how concepts link together.",
           icon: "Network",
-          route: "/dashboard/explore/connections",
+          route: "/dashboard/explore#connections",
           type: "tool",
           isActive: true
         },
@@ -116,4 +124,3 @@ export class ExploreService {
     };
   }
 }
-

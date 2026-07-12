@@ -36,4 +36,15 @@ async function handler(request: NextRequest) {
   return ApiResponseHandler.success({ logged: true }, 'Activity logged successfully');
 }
 
+async function getHandler(request: NextRequest) {
+  const auth = getAuthContext(request);
+  if (!auth) return ApiResponseHandler.unauthorized();
+
+  await connectDB();
+  const activities = await ExploreService.getRecentActivity(auth.userId, 10);
+
+  return ApiResponseHandler.success(activities, 'Activity retrieved successfully');
+}
+
 export const POST = withErrorHandling(requireAuth(handler));
+export const GET = withErrorHandling(requireAuth(getHandler));
