@@ -144,7 +144,7 @@ export default function ChapterViewPage() {
                 {completionResult?.nextChapterId ? (
                   <button 
                     onClick={() => {
-                      window.location.href = `/dashboard/neural-paths/${pathId}/chapter/${completionResult.nextChapterId}`;
+                      router.push(`/dashboard/neural-paths/${pathId}/chapter/${completionResult.nextChapterId}`);
                     }}
                     className="bg-primary text-white px-8 py-3 rounded-xl font-semibold hover:bg-primary/90 transition-colors"
                   >

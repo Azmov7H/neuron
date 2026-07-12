@@ -11,11 +11,16 @@ import { categories } from "@/lib/mock-data"; // We can keep categories as stati
 export default function NeuralPathsPage() {
   const [paths, setPaths] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [domain, setDomain] = useState("All");
 
   useEffect(() => {
     async function fetchPaths() {
+      setLoading(true);
       try {
-        const res = await fetch("/api/neural-paths");
+        const query = domain !== "All" ? `?domain=${encodeURIComponent(domain)}` : "";
+        const res = await fetch(`/api/neural-paths${query}`, {
+          credentials: "include",
+        });
         const data = await res.json();
         setPaths(data.data?.items || []);
       } catch (err) {
@@ -26,7 +31,7 @@ export default function NeuralPathsPage() {
     }
 
     fetchPaths();
-  }, []);
+  }, [domain]);
 
   if (loading) {
     return (
@@ -61,7 +66,11 @@ export default function NeuralPathsPage() {
 
         {/* Categories */}
         <section className="animate-fade-up delay-200">
-          <PathCategories categories={categories} />
+          <PathCategories
+            categories={categories}
+            active={domain}
+            onSelect={(cat) => setDomain(cat)}
+          />
         </section>
 
         {/* Recommended Paths */}

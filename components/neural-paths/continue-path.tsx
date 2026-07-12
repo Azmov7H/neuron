@@ -26,7 +26,7 @@ export function ContinuePath({ path }: PathProps) {
         </div>
 
         <Link 
-          href={`/neural-paths/${path.slug}`} 
+          href={`/dashboard/neural-paths/${path.slug}`} 
           className="flex items-center gap-2 bg-white/5 border border-white/10 hover:border-primary/30 text-foreground px-6 py-3 rounded-lg font-medium transition-all group"
         >
           Continue <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />

@@ -15,7 +15,7 @@ import {
   Menu,
 } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Logo from "@/components/logo";
 import { CommandPalette } from "./command-palette";
 import { useWorkspace } from "./workspace-context";
@@ -412,10 +412,9 @@ export function CommandBar() {
     }
   }, [router]);
 
-  // Build breadcrumb from current pathname
-  const segments = router && typeof window !== "undefined"
-    ? window.location.pathname.split("/").filter(Boolean)
-    : [];
+  // Build breadcrumb from current pathname (SSR-safe)
+  const pathname = usePathname() ?? "";
+  const segments = pathname.split("/").filter(Boolean);
   const breadcrumbs = segments.slice(1); // drop "dashboard"
 
   return (
