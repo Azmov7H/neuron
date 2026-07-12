@@ -17,6 +17,7 @@ export interface DockItem {
   status: "running" | "paused" | "done" | "error";
   progress?: number; // 0-100
   icon?: React.ReactNode;
+  href?: string;
 }
 
 interface WorkspaceContextValue {

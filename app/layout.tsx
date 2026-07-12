@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     "Neural Mastery",
   ],
 
-  authors: [{ name: "Neural Mastery Team" }],
+  authors: [{ name: "Ali Nagy " }],
 
   creator: "Neural Mastery",
 

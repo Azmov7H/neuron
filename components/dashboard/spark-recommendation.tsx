@@ -1,29 +1,43 @@
-// components/dashboard/spark-recommendation.tsx
-import { Sparkles, ArrowUpRight } from "lucide-react";
+"use client";
+
+import { Sparkles, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 export function SparkRecommendation() {
   return (
-    <div className="h-full glass rounded-2xl p-8 flex flex-col justify-between relative overflow-hidden glow-border border-secondary/20">
-      {/* AI Shimmer Effect */}
-      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-secondary/5 to-transparent animate-shimmer" />
-      
-      <div className="relative z-10">
-        <div className="flex items-center gap-2 mb-6">
-          <Sparkles className="text-secondary" size={20} />
-          <span className="text-xs font-semibold uppercase tracking-widest text-secondary">Spark Suggests</span>
-        </div>
-        
-        <p className="text-muted-foreground text-sm mb-4">Spark believes you may enjoy this concept:</p>
-        
-        <h3 className="text-xl font-semibold text-foreground leading-relaxed">
-          “How does entropy shape the arrow of time?”
-        </h3>
-      </div>
+    <div className="relative rounded-[var(--radius-lg)] p-5 border bg-[hsl(var(--ai-assistant-bg))] border-[hsl(var(--ai-assistant-border))] overflow-hidden animate-fade-in shadow-sm group">
+      {/* Decorative abstract glow in corner */}
+      <div className="absolute top-0 right-0 w-32 h-32 bg-[hsl(var(--sci-ai))]/5 rounded-full blur-3xl pointer-events-none" />
 
-      <button className="relative z-10 mt-8 self-start flex items-center gap-2 text-sm font-medium text-secondary hover:text-secondary/80 transition-colors group">
-        Explore Concept 
-        <ArrowUpRight size={16} className="group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-      </button>
+      <div className="relative z-10 flex flex-col justify-between h-full min-h-[170px]">
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles size={14} className="text-purple-400" />
+            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-purple-400">
+              Spark Suggests
+            </span>
+          </div>
+          <p className="text-muted-foreground text-[12px] mb-2 leading-relaxed">
+            Concept worth exploring today:
+          </p>
+          <h3 className="text-sm font-semibold text-foreground leading-snug mb-4 inline-flex items-center gap-1.5 flex-wrap">
+            "How does entropy shape the arrow of time?"
+            {/* Blinking streaming cursor caret */}
+            <span className="w-1.5 h-3.5 bg-primary animate-[pulse_1s_infinite] shrink-0" style={{ animationDuration: "1s" }} />
+          </h3>
+        </div>
+
+        <Link
+          href="/dashboard/spark"
+          className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-purple-400 hover:text-purple-300 transition-colors mt-auto group/link"
+        >
+          Explore with Spark AI
+          <ArrowRight
+            size={12}
+            className="group-hover/link:translate-x-1 transition-transform"
+          />
+        </Link>
+      </div>
     </div>
   );
 }

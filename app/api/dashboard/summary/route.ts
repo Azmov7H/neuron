@@ -96,6 +96,7 @@ async function handler(request: NextRequest) {
       rank: user.rank,
       totalXP: user.totalXP,
       streak: user.streak,
+      avatar: user.avatar ?? undefined,
     },
     activePath,
     weeklyStats: {
@@ -121,6 +122,7 @@ export interface DashboardSummary {
     rank: string;
     totalXP: number;
     streak: number;
+    avatar?: string;
   };
   activePath: {
     pathId: string;
