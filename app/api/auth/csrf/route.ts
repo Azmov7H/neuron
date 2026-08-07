@@ -1,6 +1,6 @@
 /**
  * GET /api/auth/csrf
- * Issues a one-time CSRF token and stores it in a same-site cookie.
+ * Issues a CSRF token and stores it in a same-site cookie
  */
 
 import { ApiResponseHandler } from '@/lib/utils/response';

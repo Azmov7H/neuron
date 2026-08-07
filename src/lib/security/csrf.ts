@@ -23,7 +23,7 @@ export function generateCsrfToken(): string {
 
 export function setCsrfCookie(response: NextResponse, token: string): NextResponse {
   response.cookies.set(CSRF_COOKIE_NAME, token, {
-    httpOnly: false,
+    httpOnly: true,
     secure: config.server.isProduction,
     sameSite: 'lax',
     path: '/',

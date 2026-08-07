@@ -17,7 +17,7 @@ async function handler() {
 
   clearAuthCookies(response);
   response.cookies.set(CSRF_COOKIE_NAME, '', {
-    httpOnly: false,
+    httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: '/',

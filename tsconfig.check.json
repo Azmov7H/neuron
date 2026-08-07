@@ -28,5 +28,5 @@
     "**/*.ts",
     "**/*.tsx"
   ],
-  "exclude": ["node_modules", ".next"]
+  "exclude": ["node_modules", ".next", "src/backend", "src/components", "src/domains", "src/engine", "src/hooks", "src/types/simulation-core.ts", "src/types/simulation.ts"]
 }

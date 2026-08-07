@@ -5,6 +5,8 @@ import { ApiResponseHandler } from '@/lib/utils/response';
 import { logger } from '@/lib/logger';
 import { SimulationRun } from '@/database/models/simulation-run';
 import mongoose from 'mongoose';
+import { requireSimulationCsrfProtection } from '@/lib/security/simulation-security';
+import { validateSimulationRun, SimulationRunCreateSchema } from '@/lib/security/validation';
 
 const MODEL_NAME = 'google/gemma-4-26b-a4b-it:free';
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -64,6 +66,84 @@ function generateLocalSimulationFallback(
           'Increase the applied force slider to overcome the threshold of static friction.',
           'Increase the mass slider to observe how inertia dampens acceleration under identical force.'
         ];
+      } else if (simulationId === 'pendulum') {
+        const L = safeParam('length', 6);
+        const g = safeParam('gravity', 9.8);
+        const T = 2 * Math.PI * Math.sqrt(L / g);
+        explanation = `A simple pendulum swings with a period governed by its cable length and local gravity: T = 2π√(L/g). With a cable length of ${L} m and gravitational acceleration ${g} m/s², the period resolves to ${T.toFixed(2)} seconds. Shorter cables oscillate faster, while stronger gravity compresses the period.`;
+        insights = [
+          `Cable length L is ${L} meters.`,
+          `Gravitational acceleration g is ${g} m/s².`,
+          `Oscillation period T resolves to ${T.toFixed(2)} s.`
+        ];
+        concepts = ['Simple Harmonic Motion', 'Period of a Pendulum', 'Gravitational Acceleration', 'Restoring Force'];
+        actions = [
+          'Shorten the cable to observe a faster, tighter oscillation period.',
+          'Increase gravity to compress the period and accelerate the swing.'
+        ];
+      } else if (simulationId === 'thermodynamics') {
+        const T = safeParam('temperature', 300);
+        const V = safeParam('volume', 5);
+        const P = (8.314 * T) / V;
+        explanation = `An ideal gas obeys the equation of state P = nRT/V. With one mole of gas at temperature ${T} K inside a chamber volume of ${V} L, the pressure reaches ${P.toFixed(1)} kPa. Raising temperature increases kinetic collisions against the walls, while expanding the volume dilutes that pressure.`;
+        insights = [
+          `Absolute temperature T is ${T} K.`,
+          `Chamber volume V is ${V} L.`,
+          `Resulting pressure P resolves to ${P.toFixed(1)} kPa.`
+        ];
+        concepts = ['Ideal Gas Law', 'Kinetic Theory', 'Pressure-Volume Relationship', 'Absolute Temperature'];
+        actions = [
+          'Raise the temperature to watch pressure climb as molecular collisions intensify.',
+          'Enlarge the chamber volume to dilute pressure and slow the gas.'
+        ];
+      } else if (simulationId === 'optics') {
+        const n1 = safeParam('index1', 1.0);
+        const n2 = safeParam('index2', 1.5);
+        const a1 = safeParam('angle1', 45);
+        const sin2 = (n1 * Math.sin((a1 * Math.PI) / 180)) / n2;
+        const a2 = Math.min(90, (Math.asin(Math.max(-1, Math.min(1, sin2))) * 180) / Math.PI);
+        explanation = `Snell's law governs refraction at a boundary: n1·sin(θ1) = n2·sin(θ2). Light entering from a medium of index ${n1} at an incident angle of ${a1}° into a medium of index ${n2} bends to a refraction angle of ${a2.toFixed(1)}°. Higher target indices pull the ray closer to the normal.`;
+        insights = [
+          `Incident medium index n1 is ${n1}.`,
+          `Refraction medium index n2 is ${n2}.`,
+          `Refraction angle θ2 resolves to ${a2.toFixed(1)}°.`
+        ];
+        concepts = ['Snell Law', 'Refractive Index', 'Optical Boundary', 'Critical Angle'];
+        actions = [
+          'Increase the second medium index to bend the ray more sharply toward the normal.',
+          'Raise the incident angle toward the critical angle to observe total internal reflection.'
+        ];
+      } else if (simulationId === 'wave_interference') {
+        const lambda = safeParam('wavelength', 550);
+        const d = safeParam('slitDistance', 12);
+        const fringe = (1 * lambda) / d;
+        explanation = `In a double-slit experiment, constructive interference forms bright fringes spaced by y = L·λ/d. For wavelength ${lambda} nm and slit separation ${d} µm (with screen distance L = 1 m), adjacent bright fringes sit ${fringe.toFixed(1)} µm apart. Narrower slits or longer wavelengths widen the fringe spacing.`;
+        insights = [
+          `Light wavelength λ is ${lambda} nm.`,
+          `Slit separation d is ${d} µm.`,
+          `Fringe spacing resolves to ${fringe.toFixed(1)} µm.`
+        ];
+        concepts = ['Wave Interference', 'Double-Slit Experiment', 'Constructive Fringes', 'Coherence'];
+        actions = [
+          'Widen the slit separation to compress the bright fringe spacing.',
+          'Lengthen the wavelength to spread the interference pattern.'
+        ];
+      } else if (simulationId === 'electrostatics') {
+        const q1 = safeParam('charge1', 10);
+        const q2 = safeParam('charge2', -10);
+        const r = safeParam('distance', 5);
+        const F = (8.99 * q1 * q2) / (r * r);
+        explanation = `Coulomb's law quantifies the force between static charges: F = k·q1·q2/r², with k ≈ 8.99. For charges ${q1} µC and ${q2} µC separated by ${r} cm, the force is ${F.toFixed(2)} N — negative values indicate attraction, positive indicate repulsion.`;
+        insights = [
+          `Charge 1 q1 is ${q1} µC.`,
+          `Charge 2 q2 is ${q2} µC.`,
+          `Net force F resolves to ${F.toFixed(2)} N (sign indicates attraction or repulsion).`
+        ];
+        concepts = ['Coulomb Law', 'Electric Field', 'Attraction and Repulsion', 'Inverse-Square Law'];
+        actions = [
+          'Flip the sign of one charge to switch between attraction and repulsion.',
+          'Reduce the separation distance to amplify the force by the inverse square.'
+        ];
       } else {
         // gravity
         const r = safeParam('orbitalRadius', 10);
@@ -113,6 +193,82 @@ function generateLocalSimulationFallback(
           'Increase the recovery rate to model active medical therapy and witness the flattening of the infection curve.',
           'Lower transmission rate to simulate social containment measures, restricting peak active infections.'
         ];
+      } else if (simulationId === 'genetics') {
+        const p = safeParam('dominantRatio', 0.6);
+        const q = 1 - p;
+        const homDom = p * p;
+        const het = 2 * p * q;
+        const rec = q * q;
+        explanation = `Mendelian inheritance distributes alleles by Hardy-Weinberg proportions p² + 2pq + q² = 1. With dominant allele frequency p = ${p}, the homozygous dominant fraction is ${(homDom * 100).toFixed(1)}%, heterozygous ${(het * 100).toFixed(1)}%, and recessive ${(rec * 100).toFixed(1)}%. Drift in p reshapes the entire genotype landscape.`;
+        insights = [
+          `Dominant allele frequency p is ${p}.`,
+          `Heterozygous carriers make up ${(het * 100).toFixed(1)}%.`,
+          `Recessive genotype fraction is ${(rec * 100).toFixed(1)}%.`
+        ];
+        concepts = ['Mendelian Genetics', 'Hardy-Weinberg Equilibrium', 'Allele Frequency', 'Genotype Ratios'];
+        actions = [
+          'Increase p to suppress the recessive phenotype frequency.',
+          'Decrease p toward 0.5 to maximize heterozygous carrier diversity.'
+        ];
+      } else if (simulationId === 'photosynthesis') {
+        const light = safeParam('lightIntensity', 8);
+        const co2 = safeParam('co2Level', 4);
+        const rate = light * co2;
+        explanation = `Photosynthetic rate scales with photon flux and carbon availability (Rate ∝ Light × CO2). At light intensity ${light} lux and CO2 concentration ${co2} PPM, the relative fixation rate is ${rate.toFixed(1)} units. Either factor alone saturates the process when the other is limiting.`;
+        insights = [
+          `Light flux is ${light} lux.`,
+          `Carbon concentration is ${co2} PPM.`,
+          `Relative fixation rate is ${rate.toFixed(1)} units.`
+        ];
+        concepts = ['Photosynthesis', 'Light Reactions', 'Limiting Factors', 'Carbon Fixation'];
+        actions = [
+          'Raise light intensity to accelerate photon capture.',
+          'Increase CO2 to relieve the carbon-limiting bottleneck.'
+        ];
+      } else if (simulationId === 'enzymes') {
+        const S = safeParam('substrateConc', 5);
+        const E = safeParam('enzymeConc', 3);
+        const Km = 5;
+        const v = (E * S) / (Km + S);
+        explanation = `Enzyme kinetics follow Michaelis-Menten saturation: v = Vmax·[S]/(Km + [S]). With enzyme concentration ${E}, substrate [S] = ${S}, and Km = ${Km}, the reaction velocity is ${v.toFixed(2)} units. Adding more substrate eventually saturates the active sites.`;
+        insights = [
+          `Substrate concentration [S] is ${S}.`,
+          `Enzyme concentration is ${E}.`,
+          `Reaction velocity v is ${v.toFixed(2)} units.`
+        ];
+        concepts = ['Michaelis-Menten Kinetics', 'Enzyme Saturation', 'Active Site', 'Vmax'];
+        actions = [
+          'Increase substrate to approach the maximum velocity Vmax.',
+          'Add more enzyme to raise the overall throughput ceiling.'
+        ];
+      } else if (simulationId === 'osmosis') {
+        const solute = safeParam('soluteRatio', 4);
+        const pi = solute * 2.5;
+        explanation = `Osmotic pressure across a semi-permeable membrane follows Π = i·M·R·T. With intracellular solute at ${solute}%, the relative osmotic pressure is ${pi.toFixed(1)} units. Water migrates toward the higher solute side until equilibrium balances the pressures.`;
+        insights = [
+          `Intracellular solute concentration is ${solute}%.`,
+          `Relative osmotic pressure is ${pi.toFixed(1)} units.`,
+          `Water flows toward the higher solute compartment until pressures balance.`
+        ];
+        concepts = ['Osmosis', 'Semi-permeable Membrane', 'Osmotic Pressure', 'Tonicity'];
+        actions = [
+          'Raise solute ratio to draw water inward via osmotic pull.',
+          'Lower solute to observe the cell swell as water exits.'
+        ];
+      } else if (simulationId === 'ecosystem') {
+        const prey = safeParam('preyPopulation', 60);
+        const pred = safeParam('predatorPopulation', 15);
+        explanation = `Predator-prey dynamics follow the Lotka-Volterra equations: dx/dt = αx − βxy. With ${prey} primary herbivores and ${pred} apex predators, the populations settle into coupled oscillations — prey boom enables predator growth, which then crashes the prey, relaxing the predators in turn.`;
+        insights = [
+          `Prey population x is ${prey}.`,
+          `Predator population y is ${pred}.`,
+          `Systems exhibit cyclic boom-bust oscillations.`
+        ];
+        concepts = ['Lotka-Volterra Model', 'Predator-Prey Oscillation', 'Population Dynamics', 'Carrying Capacity'];
+        actions = [
+          'Increase prey to fuel a subsequent predator surge.',
+          'Raise predators to witness the prey population crash.'
+        ];
       } else {
         // immune
         const pathogen = safeParam('pathogenCount', 50);
@@ -161,6 +317,80 @@ function generateLocalSimulationFallback(
           'Increase myelination to study how the myelin sheath dramatically accelerates impulse velocities.',
           'Decrease stimulus strength below the threshold to observe the sub-threshold graded potentials that fail to trigger.'
         ];
+      } else if (simulationId === 'nephron') {
+        const pg = safeParam('filterPressure', 45);
+        const pb = safeParam('urineResistance', 12);
+        const gfr = pg - pb;
+        explanation = `Glomerular filtration rate depends on the net pressure across the Bowman capsule: GFR = Kf·(P_g − P_b − π_g). With glomerular pressure ${pg} mmHg and Bowman resistance ${pb} mmHg, the net driving pressure is ${gfr.toFixed(1)} mmHg. Higher glomerular pressure forces more plasma through the filter.`;
+        insights = [
+          `Glomerular pressure P_g is ${pg} mmHg.`,
+          `Bowman resistance P_b is ${pb} mmHg.`,
+          `Net filtration pressure is ${gfr.toFixed(1)} mmHg.`
+        ];
+        concepts = ['Glomerular Filtration', 'Bowman Capsule', 'Net Filtration Pressure', 'Renal Clearance'];
+        actions = [
+          'Raise glomerular pressure to increase filtration throughput.',
+          'Increase Bowman resistance to throttle filtration.'
+        ];
+      } else if (simulationId === 'pulmonary') {
+        const dp = safeParam('oxygenPartialPress', 104);
+        const thick = safeParam('barrierThickness', 2);
+        const vgas = dp / thick;
+        explanation = `Alveolar gas exchange obeys Fick's law: V_gas ∝ A·D·ΔP/T. With alveolar O2 pressure ${dp} mmHg across a membrane ${thick} µm thick, the relative diffusion rate is ${vgas.toFixed(1)} units. A thinner barrier drastically accelerates oxygen uptake.`;
+        insights = [
+          `Alveolar O2 pressure ΔP is ${dp} mmHg.`,
+          `Membrane thickness T is ${thick} µm.`,
+          `Relative diffusion rate is ${vgas.toFixed(1)} units.`
+        ];
+        concepts = ['Fick Law of Diffusion', 'Alveolar Gas Exchange', 'Membrane Thickness', 'Partial Pressure'];
+        actions = [
+          'Thin the membrane to accelerate oxygen diffusion.',
+          'Raise alveolar O2 pressure to push more gas across.'
+        ];
+      } else if (simulationId === 'muscle') {
+        const ca = safeParam('calciumLevel', 5);
+        const atp = safeParam('atpAvailability', 8);
+        const force = ca * atp * 0.4;
+        explanation = `Sliding-filament contraction scales with calcium-triggered cross-bridge recruitment and ATP fuel: F = F0(1 − v/vmax). With intracellular Ca²⁺ at ${ca} and ATP availability ${atp}, the relative contractile force is ${force.toFixed(1)} units. Calcium exposes binding sites; ATP powers the stroke.`;
+        insights = [
+          `Intracellular Ca²⁺ is ${ca}.`,
+          `ATP availability is ${atp}.`,
+          `Relative contractile force is ${force.toFixed(1)} units.`
+        ];
+        concepts = ['Sliding Filament Theory', 'Cross-Bridge Cycle', 'Calcium Signaling', 'ATP-Dependent Contraction'];
+        actions = [
+          'Increase calcium to expose more actin binding sites.',
+          'Raise ATP availability to sustain repeated power strokes.'
+        ];
+      } else if (simulationId === 'endocrine') {
+        const carbs = safeParam('carbIntake', 60);
+        const sens = safeParam('insulinSensitivity', 4);
+        explanation = `Blood glucose follows a feedback loop: dG/dt = I_prod − I_util·G. With a carb load of ${carbs} g and insulin affinity ${sens}, the system drives glucose down faster as insulin sensitivity rises. Low sensitivity leaves glucose elevated, modeling insulin resistance.`;
+        insights = [
+          `Carbohydrate load is ${carbs} g.`,
+          `Insulin sensitivity is ${sens}.`,
+          `Higher sensitivity clears glucose more rapidly.`
+        ];
+        concepts = ['Insulin Feedback Loop', 'Glucose Homeostasis', 'Insulin Sensitivity', 'Beta-Cell Response'];
+        actions = [
+          'Increase insulin sensitivity to clear blood glucose faster.',
+          'Raise carb intake to stress the regulatory loop.'
+        ];
+      } else if (simulationId === 'bone') {
+        const cal = safeParam('calciumIntake', 8);
+        const d3 = safeParam('vitaminD', 5);
+        const mass = cal * d3 * 0.5;
+        explanation = `Bone remodeling deposits mineral in proportion to dietary calcium and vitamin D activation: Bone_mass ∝ D3·Cal. With calcium intake ${cal} mg and vitamin D index ${d3}, the relative deposit rate is ${mass.toFixed(1)} units. Vitamin D is required to absorb the calcium in the first place.`;
+        insights = [
+          `Dietary calcium is ${cal} mg.`,
+          `Vitamin D3 index is ${d3}.`,
+          `Relative mineral deposit rate is ${mass.toFixed(1)} units.`
+        ];
+        concepts = ['Osteoblast Deposition', 'Calcium Homeostasis', 'Vitamin D Activation', 'Bone Remodeling'];
+        actions = [
+          'Increase vitamin D to improve calcium absorption.',
+          'Raise dietary calcium to feed mineral deposition.'
+        ];
       } else {
         // blood
         const r = safeParam('vesselRadius', 3);
@@ -208,6 +438,72 @@ function generateLocalSimulationFallback(
           'Increase beads count to 500 to see how the statistical noise flattens into a smooth Gaussian curve.',
           'Tweak bin distribution sizes to see how standard deviation and variance shift in real-time.'
         ];
+      } else if (simulationId === 'chaos') {
+        const rho = safeParam('chaosRho', 28);
+        explanation = `The Lorenz system (σ = 10, ρ = ${rho}, β = 8/3) produces a chaotic butterfly attractor. At Rayleigh factor ρ = ${rho}, trajectories spiral around two unstable lobes, never repeating — the hallmark of deterministic chaos and sensitive dependence on initial conditions.`;
+        insights = [
+          `Rayleigh factor ρ is ${rho}.`,
+          `Fixed parameters σ = 10, β = 8/3.`,
+          `Trajectories trace a non-repeating strange attractor.`
+        ];
+        concepts = ['Lorenz Attractor', 'Deterministic Chaos', 'Strange Attractor', 'Sensitive Dependence'];
+        actions = [
+          'Push ρ above 24 to unleash full chaotic divergence.',
+          'Lower ρ toward 14 to settle into a stable fixed point.'
+        ];
+      } else if (simulationId === 'fractal') {
+        const iters = safeParam('iterationsLimit', 40);
+        explanation = `The Mandelbrot set iterates zₙ₊₁ = zₙ² + c up to ${iters} depths. Points whose orbit stays bounded belong to the set; escaping points are colored by escape speed, revealing infinitely detailed boundaries at every zoom level.`;
+        insights = [
+          `Iteration depth is ${iters}.`,
+          `Escape-time coloring reveals boundary detail.`,
+          `Structure is self-similar at all scales.`
+        ];
+        concepts = ['Mandelbrot Set', 'Complex Iteration', 'Fractal Boundary', 'Escape-Time Algorithm'];
+        actions = [
+          'Increase iteration depth to resolve finer boundary filaments.',
+          'Zoom into the boundary to expose recursive self-similarity.'
+        ];
+      } else if (simulationId === 'fourier') {
+        const n = safeParam('harmonicCount', 3);
+        explanation = `Fourier synthesis builds periodic waves as a sum of sines: f(t) = Σ Aₙ·sin(nωt). Overlapping ${n} harmonic frequencies reconstructs square, triangle, or sawtooth shapes — more terms approximate the target with sharper edges.`;
+        insights = [
+          `Harmonic count n is ${n}.`,
+          `Each term adds a higher sine frequency.`,
+          `More terms sharpen the reconstructed waveform.`
+        ];
+        concepts = ['Fourier Series', 'Harmonic Synthesis', 'Wave Decomposition', 'Orthogonality'];
+        actions = [
+          'Increase harmonic count to sharpen the reconstructed edges.',
+          'Vary amplitudes to sculpt custom periodic waveforms.'
+        ];
+      } else if (simulationId === 'calculus') {
+        const rects = safeParam('rectanglesCount', 16);
+        explanation = `Riemann sums approximate an integral by stacking ${rects} rectangles: ∫ f(x)dx ≈ Σ f(xᵢ)Δx. More subdivisions sample the curve at finer resolution, driving the discrete sum toward the exact continuous area.`;
+        insights = [
+          `Subdivision count n is ${rects}.`,
+          `Each rectangle samples f(xᵢ) over Δx.`,
+          `Finer subdivisions converge to the true area.`
+        ];
+        concepts = ['Riemann Sum', 'Numerical Integration', 'Definite Integral', 'Convergence'];
+        actions = [
+          'Increase subdivisions to tighten the area estimate.',
+          'Compare left, right, and midpoint rules for the same curve.'
+        ];
+      } else if (simulationId === 'fibonacci') {
+        const scale = safeParam('spiralScale', 4);
+        const phi = (1 + Math.sqrt(5)) / 2;
+        explanation = `The golden spiral grows by the ratio φ = ${phi.toFixed(3)} ≈ 1.618. At growth scale ${scale}, each quarter-turn expands the radius by φ, tracing the logarithmic spiral found in shells and galaxies.`;
+        insights = [
+          `Growth scale is ${scale}.`,
+          `Golden ratio φ is ${phi.toFixed(3)}.`,
+          `Each turn multiplies radius by φ.`
+        ];
+        concepts = ['Golden Ratio', 'Logarithmic Spiral', 'Fibonacci Sequence', 'Phyllotaxis'];
+        actions = [
+          'Increase the growth scale to stretch the spiral outward.',
+          'Compare against the true φ to verify the golden proportion.'
+        ];
       } else {
         // graph
         const nodes = safeParam('nodesCount', 30);
@@ -227,7 +523,7 @@ function generateLocalSimulationFallback(
       }
       break;
 
-    case 'quantum mechanics':
+    case 'quantum':
       if (simulationId === 'wave') {
         const n = safeParam('energyLevel', 2);
         const w = safeParam('wellWidth', 6);
@@ -241,6 +537,93 @@ function generateLocalSimulationFallback(
         actions = [
           'Increase quantum number n to 5 to observe a higher energy frequency and increased spatial node points.',
           'Widen the potential well and see how the spatial wavelength expands, corresponding to lower energy states.'
+        ];
+      } else if (simulationId === 'tunneling') {
+        const v0 = safeParam('barrierHeight', 8);
+        const e = safeParam('particleEnergy', 4);
+        const kappa = Math.sqrt(Math.max(0, v0 - e));
+        const T = Math.exp(-2 * kappa);
+        explanation = `Quantum tunneling gives a particle a finite probability of crossing a forbidden barrier: T ≈ e^(−2κa). With barrier height ${v0} and particle energy ${e}, the transmission probability is ${T.toFixed(3)} — small but nonzero whenever energy falls below the barrier.`;
+        insights = [
+          `Barrier height V0 is ${v0}.`,
+          `Particle energy E is ${e}.`,
+          `Transmission probability T is ${T.toFixed(3)}.`
+        ];
+        concepts = ['Quantum Tunneling', 'Barrier Penetration', 'Wavefunction Decay', 'Probability Current'];
+        actions = [
+          'Raise particle energy toward the barrier to boost transmission.',
+          'Lower the barrier height to widen the tunneling window.'
+        ];
+      } else if (simulationId === 'spin') {
+        const theta = safeParam('spinTheta', 90);
+        const phi = safeParam('spinPhi', 45);
+        explanation = `A qubit state lives on the Bloch sphere: |ψ⟩ = cos(θ/2)|0⟩ + e^(iφ)·sin(θ/2)|1⟩. At latitude θ = ${theta}° and phase φ = ${phi}°, the state sits between the poles, with its |0⟩/|1⟩ mix set by the polar angle.`;
+        insights = [
+          `Bloch latitude θ is ${theta}°.`,
+          `Phase angle φ is ${phi}°.`,
+          `Polar angle sets the |0⟩/|1⟩ superposition mix.`
+        ];
+        concepts = ['Bloch Sphere', 'Qubit State', 'Unitary Rotation', 'Superposition'];
+        actions = [
+          'Sweep θ from 0 to 180° to rotate the state pole to pole.',
+          'Change φ to shift the relative phase between basis states.'
+        ];
+      } else if (simulationId === 'entanglement') {
+        const ang = safeParam('correlationAngle', 45);
+        const corr = Math.cos((2 * ang * Math.PI) / 180);
+        explanation = `Bell-state correlations violate classical bounds: measuring entangled particles at angle ${ang}° yields correlation ${corr.toFixed(3)}. Spooky action shows stronger-than-classical agreement, peaking when measurements align.`;
+        insights = [
+          `Measurement angle is ${ang}°.`,
+          `Correlation coefficient is ${corr.toFixed(3)}.`,
+          `Violates Bell's inequality for aligned settings.`
+        ];
+        concepts = ['Bell States', 'Quantum Entanglement', 'Bell Inequality', 'Non-locality'];
+        actions = [
+          'Align both measurement angles to maximize correlation.',
+          'Rotate one angle to watch the correlation oscillate.'
+        ];
+      } else if (simulationId === 'hydrogen') {
+        const n = safeParam('quantumNumber', 2);
+        const a0 = 0.529;
+        const r = n * n * a0;
+        explanation = `Bohr quantized the hydrogen orbit: rₙ = n²·a₀. At principal quantum number n = ${n}, the orbital radius is ${r.toFixed(2)} Å (a₀ ≈ ${a0} Å). Higher shells balloon outward quadratically.`;
+        insights = [
+          `Principal quantum number n is ${n}.`,
+          `Bohr radius a₀ ≈ ${a0} Å.`,
+          `Orbital radius rₙ is ${r.toFixed(2)} Å.`
+        ];
+        concepts = ['Bohr Model', 'Quantized Orbit', 'Principal Quantum Number', 'Atomic Radius'];
+        actions = [
+          'Increase n to watch the electron shell expand outward.',
+          'Compare radii across shells to see the n² scaling.'
+        ];
+      } else if (simulationId === 'harmonic') {
+        const n = safeParam('oscillatorEnergy', 1);
+        const En = n + 0.5;
+        explanation = `The quantum harmonic oscillator has evenly spaced levels: Eₙ = (n + ½)ℏω. At vibrational state n = ${n}, the energy is ${En.toFixed(1)}·ℏω above the zero-point floor — a nonzero baseline even at the ground state.`;
+        insights = [
+          `Vibrational state n is ${n}.`,
+          `Energy Eₙ is ${En.toFixed(1)}·ℏω.`,
+          `Zero-point energy keeps the ground state non-zero.`
+        ];
+        concepts = ['Quantum Harmonic Oscillator', 'Energy Quantization', 'Zero-Point Energy', 'Hermite Polynomials'];
+        actions = [
+          'Raise n to climb the evenly spaced ladder of energies.',
+          'Note the residual zero-point energy at n = 0.'
+        ];
+      } else if (simulationId === 'superposition') {
+        const a = safeParam('probabilityAlpha', 50) / 100;
+        const b = Math.sqrt(1 - a * a);
+        explanation = `A qubit in superposition reads |ψ⟩ = α|0⟩ + β|1⟩ with α = ${a.toFixed(2)}. Measurement collapses it to |0⟩ with probability ${(a * a * 100).toFixed(0)}% or |1⟩ with ${(b * b * 100).toFixed(0)}%. Until measured, both outcomes coexist.`;
+        insights = [
+          `State |0⟩ weight α is ${a.toFixed(2)}.`,
+          `Collapse to |0⟩ with ${(a * a * 100).toFixed(0)}% probability.`,
+          `Collapse to |1⟩ with ${(b * b * 100).toFixed(0)}% probability.`
+        ];
+        concepts = ['Quantum Superposition', 'State Collapse', 'Probability Amplitude', 'Measurement Postulate'];
+        actions = [
+          'Set α to 50% for a maximally balanced coin flip.',
+          'Bias α toward 0 or 1 to weight the measurement outcome.'
         ];
       } else {
         // uncertainty
@@ -260,7 +643,7 @@ function generateLocalSimulationFallback(
       }
       break;
 
-    case 'space science':
+    case 'space':
       if (simulationId === 'orbit') {
         const r = safeParam('orbitSemiMajorAxis', 12);
         const m = safeParam('starMass', 150);
@@ -292,6 +675,76 @@ function generateLocalSimulationFallback(
         actions = [
           'Move the probe closer to the Schwarzschild boundary to watch time dilate towards infinity.',
           'Increase black hole mass and see the event horizon expand outwards, swallowing the nearby orbital path.'
+        ];
+      } else if (simulationId === 'cosmology') {
+        const h0 = safeParam('hubbleConstant', 70);
+        explanation = `Hubble's law relates recession speed to distance: v = H₀·d. With Hubble constant H₀ = ${h0} km/s/Mpc, a galaxy ${h0} Mpc away recedes at roughly ${h0} km/s — the universe expands uniformly in all directions.`;
+        insights = [
+          `Hubble constant H₀ is ${h0} km/s/Mpc.`,
+          `Recession speed scales linearly with distance.`,
+          `Expansion is isotropic and homogeneous.`
+        ];
+        concepts = ['Hubble Law', 'Cosmic Expansion', 'Redshift', 'Metric Expansion'];
+        actions = [
+          'Raise H₀ to speed up the inferred expansion rate.',
+          'Compare nearby and distant galaxies to confirm the linear relation.'
+        ];
+      } else if (simulationId === 'nebula') {
+        const rho = safeParam('dustDensity', 4);
+        const T = safeParam('gasTemp', 20);
+        const mj = Math.pow(T, 1.5) / Math.sqrt(rho);
+        explanation = `Jeans instability decides whether a gas cloud collapses: M_J ∝ T^(3/2)·ρ^(−1/2). With density ${rho} and temperature ${T} K, the Jeans mass is ${mj.toFixed(1)} units. Cold, dense clouds fall below the threshold and ignite star formation.`;
+        insights = [
+          `Core density ρ is ${rho}.`,
+          `Cloud temperature T is ${T} K.`,
+          `Jeans mass is ${mj.toFixed(1)} units.`
+        ];
+        concepts = ['Jeans Instability', 'Gravitational Collapse', 'Star Formation', 'Thermal Pressure'];
+        actions = [
+          'Cool the cloud to drop the Jeans mass and trigger collapse.',
+          'Raise density to overcome thermal pressure support.'
+        ];
+      } else if (simulationId === 'tides') {
+        const d = safeParam('moonDistance', 8);
+        const tide = 1 / (d * d * d);
+        explanation = `Lunar tides follow an inverse-cube law: F_tidal ∝ M_moon/d³. At orbital distance ${d} Earth radii, the relative tidal pull is ${tide.toFixed(4)} units. Moving the Moon closer spikes the bulge dramatically.`;
+        insights = [
+          `Orbital distance d is ${d} Earth radii.`,
+          `Tidal force scales as 1/d³.`,
+          `Relative pull is ${tide.toFixed(4)} units.`
+        ];
+        concepts = ['Tidal Force', 'Inverse-Cube Law', 'Roche Limit', 'Ocean Bulge'];
+        actions = [
+          'Bring the Moon closer to amplify the tidal bulge.',
+          'Move it away to watch terrestrial tides fade.'
+        ];
+      } else if (simulationId === 'magnetosphere') {
+        const v = safeParam('windVelocity', 5);
+        const B = safeParam('fieldStrength', 8);
+        const rm = Math.pow(B, 1 / 3);
+        explanation = `A planetary magnetosphere stands off the solar wind where magnetic pressure balances it: r_magneto ∝ B^(1/3). With wind speed ${v} and core dipole ${B}, the standoff radius is ${rm.toFixed(2)} units. Stronger fields carve a larger protective bubble.`;
+        insights = [
+          `Solar wind speed v is ${v}.`,
+          `Core dipole B is ${B}.`,
+          `Magnetopause radius scales with ${rm.toFixed(2)} units.`
+        ];
+        concepts = ['Magnetosphere', 'Solar Wind', 'Magnetic Pressure', 'Standoff Distance'];
+        actions = [
+          'Strengthen the dipole to enlarge the protective magnetopause.',
+          'Increase wind speed to compress the field inward.'
+        ];
+      } else if (simulationId === 'pulsar') {
+        const p = safeParam('rotationSpeed', 6);
+        explanation = `A pulsar sweeps a radio beam once per spin: P_spin ≈ ${p} ms. With a spin period of ${p} milliseconds, the neutron star rotates hundreds of times per second, flashing like a cosmic lighthouse.`;
+        insights = [
+          `Spin period is ${p} ms.`,
+          `Hundreds of rotations per second.`,
+          `Beam sweeps Earth as a periodic pulse.`
+        ];
+        concepts = ['Pulsar', 'Neutron Star', 'Radio Lighthouse', 'Spin Period'];
+        actions = [
+          'Shorten the spin period to speed up the pulse rate.',
+          'Compare against millisecond pulsars for rotational extremes.'
         ];
       } else {
         // stellar
@@ -379,13 +832,34 @@ async function handler(request: NextRequest) {
     return ApiResponseHandler.badRequest('Invalid request body');
   }
 
-  const { domain, simulationId, parameters, stateSnapshot, userQuestion } = body;
-
-  if (!domain || !simulationId) {
-    return ApiResponseHandler.badRequest('Simulation Domain and Simulation ID are required.');
+  // Validate request body against schema
+  let validatedData;
+  try {
+    validatedData = validateSimulationRun(body, SimulationRunCreateSchema);
+    if (!validatedData.parameters) {
+      throw new Error('Parameters are required');
+    }
+    if (!validatedData.metrics) {
+      validatedData.metrics = {};
+    }
+    if (validatedData.entities) {
+      // Convert unvalidated entities to properly typed array
+      validatedData.entities = Array.isArray(validatedData.entities) ? 
+        validatedData.entities.map((ent: any, idx: number) => ({ ...ent, id: ent.id || `entity-${idx}` })) : 
+        [];
+    } else {
+      validatedData.entities = [];
+    }
+    // Replace original body with validated data
+    Object.assign(body, validatedData);
+  } catch (validationError) {
+    logger.warn('[Simulation API] Validation failed:', validationError instanceof Error ? validationError.message : 'Unknown validation error');
+    return ApiResponseHandler.badRequest(validationError instanceof Error ? validationError.message : 'Invalid request data');
   }
 
-  const targetQuestion = userQuestion ? userQuestion.trim() : 'Explain the current simulation telemetry and recommend variables adjustments.';
+  const { domain, simulationId, parameters, stateSnapshot, userQuestion } = validatedData;
+
+  const targetQuestion = userQuestion ? userQuestion.trim().replace(/[<>]/g, '') : 'Explain the current simulation telemetry and recommend variables adjustments.';
   const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || '';
   const encoder = new TextEncoder();
 
@@ -653,4 +1127,4 @@ Explain the current state clearly.
   });
 }
 
-export const POST = withErrorHandling(requireAuth(handler));
+export const POST = withErrorHandling(requireSimulationCsrfProtection(requireAuth(handler)));

@@ -3,35 +3,99 @@
 
 import Link from "next/link";
 import { Play, Sparkles, Zap, Brain, Activity } from "lucide-react";
-import { Canvas } from "@react-three/fiber";
-import { OrbitControls, Float, Sphere, MeshDistortMaterial } from "@react-three/drei";
+import React, { useEffect, useRef } from 'react';
 
-function NeuralNetworkScene() {
-  return (
-    <>
-      {/* Floating Neural Nodes */}
-      <Float speed={1.4} rotationIntensity={1} floatIntensity={2}>
-        <Sphere args={[0.1]} position={[-2, 1, 0]}>
-          <MeshDistortMaterial color="#3b82f6" distort={0.3} speed={2} />
-        </Sphere>
-      </Float>
-      <Float speed={1.2} rotationIntensity={1.2} floatIntensity={1.5}>
-        <Sphere args={[0.08]} position={[2, -1, 0]}>
-          <MeshDistortMaterial color="#06b6d4" distort={0.4} speed={1.5} />
-        </Sphere>
-      </Float>
-      <Float speed={1.6} rotationIntensity={0.8} floatIntensity={2.5}>
-        <Sphere args={[0.06]} position={[0, 0, 1]}>
-          <MeshDistortMaterial color="#8b5cf6" distort={0.2} speed={2.5} />
-        </Sphere>
-      </Float>
-      <Float speed={1.3} rotationIntensity={1.5} floatIntensity={1.8}>
-        <Sphere args={[0.09]} position={[-1, -1.5, -0.5]}>
-          <MeshDistortMaterial color="#f59e0b" distort={0.35} speed={1.8} />
-        </Sphere>
-      </Float>
-    </>
-  );
+function CanvasNeuralNetwork() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let width = canvas.width = canvas.offsetWidth;
+    let height = canvas.height = canvas.offsetHeight;
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = canvas.offsetWidth;
+      height = canvas.height = canvas.offsetHeight;
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    const particles: Array<{
+      x: number;
+      y: number;
+      vx: number;
+      vy: number;
+      radius: number;
+      color: string;
+    }> = [];
+
+    const colors = ['#3b82f6', '#06b6d4', '#8b5cf6', '#f59e0b'];
+
+    for (let i = 0; i < 45; i++) {
+      particles.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        vx: (Math.random() - 0.5) * 0.4,
+        vy: (Math.random() - 0.5) * 0.4,
+        radius: Math.random() * 2 + 1,
+        color: colors[Math.floor(Math.random() * colors.length)],
+      });
+    }
+
+    const draw = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      // Draw connections
+      ctx.lineWidth = 0.5;
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          if (dist < 110) {
+            const alpha = (1 - dist / 110) * 0.2;
+            ctx.strokeStyle = `rgba(139, 92, 246, ${alpha})`;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Update & Draw particles
+      particles.forEach((p) => {
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0 || p.x > width) p.vx *= -1;
+        if (p.y < 0 || p.y > height) p.vy *= -1;
+
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      animationFrameId = requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
+
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full pointer-events-none" />;
 }
 
 export function SimulationsHero() {
@@ -40,16 +104,22 @@ export function SimulationsHero() {
       {/* Enhanced Background */}
       <div className="absolute inset-0 bg-gradient-to-br from-purple-900/40 via-background to-blue-900/30" />
       <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent" />
-      <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1620712943543-bcc4688e7485?ixlib=rb-4.0.3&auto=format&fit=crop&w=1074&q=80')] bg-cover bg-center opacity-15 mix-blend-luminosity group-hover:scale-105 transition-transform duration-1000" />
+      {/* Self-hosted CSS texture — replaces external Unsplash URL (S-5 CSP fix) */}
+      <div className="absolute inset-0 opacity-20 mix-blend-luminosity group-hover:scale-105 transition-transform duration-1000"
+        style={{
+          backgroundImage: `
+            radial-gradient(ellipse 80% 60% at 20% 40%, rgba(96,165,250,0.18) 0%, transparent 60%),
+            radial-gradient(ellipse 60% 80% at 80% 20%, rgba(167,139,250,0.15) 0%, transparent 55%),
+            radial-gradient(ellipse 40% 40% at 50% 80%, rgba(34,211,238,0.12) 0%, transparent 50%),
+            repeating-linear-gradient(0deg, transparent, transparent 40px, rgba(255,255,255,0.008) 40px, rgba(255,255,255,0.008) 41px),
+            repeating-linear-gradient(90deg, transparent, transparent 40px, rgba(255,255,255,0.008) 40px, rgba(255,255,255,0.008) 41px)
+          `
+        }}
+      />
 
-      {/* 3D Neural Network Overlay */}
+      {/* Pure Canvas Neural Network Overlay */}
       <div className="absolute inset-0">
-        <Canvas camera={{ position: [0, 0, 5], fov: 50 }}>
-          <ambientLight intensity={0.5} />
-          <pointLight position={[10, 10, 10]} />
-          <NeuralNetworkScene />
-          <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={0.5} />
-        </Canvas>
+        <CanvasNeuralNetwork />
       </div>
 
       {/* Floating Particles Effect */}
@@ -79,7 +149,7 @@ export function SimulationsHero() {
           </h1>
 
           <p className="text-lg text-muted-foreground mb-8 max-w-xl leading-relaxed">
-            Explore Einstein's relativity, epidemic SIR transmissions, white blood cell phagocytosis sweeps, quantized quantum energy fields, and Schwarzschild redshift event horizons at 60 FPS, with direct Spark AI streaming assessments.
+            Explore Einstein&apos;s relativity, epidemic SIR transmissions, white blood cell phagocytosis sweeps, quantized quantum energy fields, and Schwarzschild redshift event horizons at 60 FPS, with direct Spark AI streaming assessments.
           </p>
 
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6">
