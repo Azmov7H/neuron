@@ -58,7 +58,7 @@ const navSections = [
 ];
 
 async function fetchCsrfToken() {
-  const response = await fetch('/api/auth/csrf');
+  const response = await fetch('/api/auth/csrf', { credentials: 'include' });
   if (!response.ok) {
     throw new Error('Unable to obtain CSRF token');
   }

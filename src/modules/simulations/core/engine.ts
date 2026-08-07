@@ -3,15 +3,16 @@
  */
 
 import { ISimulationPlugin, SimulationState, SimulationLifecycleEvent, SimulationEventCallback } from '../types';
+export type { ISimulationPlugin, SimulationState } from '../types';
 import { logger } from '@/lib/logger';
 
 export class SimulationEngine {
   private plugin: ISimulationPlugin;
   private state: SimulationState;
   
-  private isRunning = false;
-  private animationFrameId: number | null = null;
-  private lastTimestamp = 0;
+  public isRunning = false;
+  public animationFrameId: number | null = null;
+  public lastTimestamp = 0;
   
   private callbacks: Set<SimulationEventCallback> = new Set();
 
@@ -55,7 +56,7 @@ export class SimulationEngine {
   /**
    * Reset simulation to original parameters
    */
-  public reset(parameters?: Record<string, number>) {
+  public reset(parameters?: Record<string, number>): SimulationState {
     const wasRunning = this.isRunning;
     this.pause();
     
@@ -66,6 +67,7 @@ export class SimulationEngine {
     if (wasRunning) {
       this.start();
     }
+    return this.state;
   }
 
   /**
@@ -84,6 +86,14 @@ export class SimulationEngine {
 
   public getPluginMetadata(): Record<string, any> {
     return this.plugin.getVisualizationMetadata(this.state);
+  }
+
+  public get timeStep(): number {
+    return this.state.timeStep;
+  }
+
+  public set timeStep(v: number) {
+    this.state.timeStep = v;
   }
 
   /**

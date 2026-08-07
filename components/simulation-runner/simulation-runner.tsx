@@ -1,17 +1,28 @@
 // components/simulation-runner/simulation-runner.tsx
 "use client";
 
-import { useState, useEffect, useRef, memo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import type { LucideIcon } from "lucide-react";
 import { 
   Atom, Brain, Heart, Landmark, Orbit, Compass, 
-  Sparkles, Play, Pause, RefreshCw, ChevronUp, ChevronDown, 
-  Send, Database, History, X, Cpu, Settings, ChevronRight
+  Sparkles, Play, Pause, RefreshCw, 
+  Send, Database, History, X, Settings, ChevronRight
 } from "lucide-react";
+import { isInteractiveSim } from "@/components/simulations/constants";
+import { ConceptualTelemetryHUD } from "@/components/simulation-runner/conceptual-telemetry-hud";
+import { fetchSimulationConfig } from "@/components/simulations/simulation-config-client";
+
+// Import centralized types and constants
+import type {
+  ScientificDomain,
+  TelemetrySnapshot,
+} from "@/components/simulation-runner/simulation.types";
+import { SimulationEngine } from "@/components/simulation-runner/simulation-engine";
 
 // ============================================================================
 // TYPES & SYSTEM CONFIGURATION
 // ============================================================================
-type ScientificDomain = 'physics' | 'biology' | 'anatomy' | 'mathematics' | 'quantum' | 'space';
+// ScientificDomain is imported from simulation.types above
 
 interface SubSimulation {
   id: string;
@@ -28,15 +39,30 @@ interface SubSimulation {
   }>;
 }
 
-// Client Fallback Config in case the API is offline
-const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, {
+interface SimulationDomainConfig {
   name: string;
-  icon: any;
+  icon?: LucideIcon;
   colorClass: string;
   glowClass: string;
   accentHex: string;
   simulations: SubSimulation[];
-}> = {
+}
+
+
+interface HistoryRun {
+  _id: string;
+  timestamp: string;
+  parameters: Record<string, number>;
+  aiInterpretation: {
+    explanation: string;
+    keyInsights: string[];
+    concepts: string[];
+    recommendedActions: string[];
+  };
+}
+
+// Client Fallback Config in case the API is offline
+const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, SimulationDomainConfig> = {
   physics: {
     name: "Physics Labs",
     icon: Atom,
@@ -73,6 +99,63 @@ const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, {
         paramsList: [
           { key: "orbitalRadius", label: "Orbit Radius (r)", min: 3, max: 14, step: 0.5 },
           { key: "centralMass", label: "Stellar Mass (M)", min: 50, max: 300, step: 10 }
+        ]
+      },
+      {
+        id: "pendulum",
+        name: "Simple Harmonic Pendulum",
+        desc: "Observe the regular periodicity of gravitational acceleration balancing cable lengths.",
+        equation: "T = 2\\pi\\sqrt{\\frac{L}{g}}",
+        defaultParams: { length: 6, gravity: 9.8 },
+        paramsList: [
+          { key: "length", label: "Cable Length (L meters)", min: 2, max: 12, step: 0.5 },
+          { key: "gravity", label: "Gravitational (g m/s\u00b2)", min: 1.6, max: 25.0, step: 0.2 }
+        ]
+      },
+      {
+        id: "thermodynamics",
+        name: "Ideal Gas Pressure Sandbox",
+        desc: "Model thermodynamic kinetic energy collisions within a bounded volume chamber.",
+        equation: "P = \\frac{n \\cdot R \\cdot T}{V}",
+        defaultParams: { temperature: 300, volume: 5 },
+        paramsList: [
+          { key: "temperature", label: "Temperature (T Kelvin)", min: 100, max: 600, step: 10 },
+          { key: "volume", label: "Chamber Volume (V Liters)", min: 2, max: 15, step: 0.5 }
+        ]
+      },
+      {
+        id: "optics",
+        name: "Snell Refraction Wave",
+        desc: "Graph the velocity bending paths of light waves transitioning boundary indices.",
+        equation: "n_1 \\sin(\\theta_1) = n_2 \\sin(\\theta_2)",
+        defaultParams: { index1: 1.0, index2: 1.5, angle1: 45 },
+        paramsList: [
+          { key: "index1", label: "Medium 1 Refraction (n\u2081)", min: 1.0, max: 2.5, step: 0.1 },
+          { key: "index2", label: "Medium 2 Refraction (n\u2082)", min: 1.0, max: 2.5, step: 0.1 },
+          { key: "angle1", label: "Incident Angle (\u03b8\u2081\u00b0)", min: 0, max: 85, step: 1 }
+        ]
+      },
+      {
+        id: "wave_interference",
+        name: "Double Slit Interference",
+        desc: "Observe crests and troughs overlapping to form phase shifts and bright fringes.",
+        equation: "y = \\frac{L \\cdot \\lambda}{d}",
+        defaultParams: { wavelength: 550, slitDistance: 12 },
+        paramsList: [
+          { key: "wavelength", label: "Light Color (\u03bb nm)", min: 380, max: 750, step: 10 },
+          { key: "slitDistance", label: "Slit Separation (d \u03bcm)", min: 4, max: 24, step: 0.5 }
+        ]
+      },
+      {
+        id: "electrostatics",
+        name: "Coulomb Particle Force",
+        desc: "Model deep attraction and repulsion vectors acting between static charges.",
+        equation: "F = k_e \\cdot \\frac{q_1 \\cdot q_2}{r^2}",
+        defaultParams: { charge1: 10, charge2: -10, distance: 5 },
+        paramsList: [
+          { key: "charge1", label: "Charge 1 (q\u2081 \u03bcC)", min: -30, max: 30, step: 1 },
+          { key: "charge2", label: "Charge 2 (q\u2082 \u03bcC)", min: -30, max: 30, step: 1 },
+          { key: "distance", label: "Separation Radius (r cm)", min: 2, max: 12, step: 0.2 }
         ]
       }
     ]
@@ -117,6 +200,55 @@ const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, {
           { key: "pathogenCount", label: "Pathogens (Red)", min: 10, max: 100, step: 5 },
           { key: "wbcCount", label: "Leukocytes (Green)", min: 2, max: 35, step: 1 }
         ]
+      },
+      {
+        id: "genetics",
+        name: "Mendel Punnett Alleles",
+        desc: "Observe gene distribution frequencies and Hardy-Weinberg equilibrium offsets.",
+        equation: "p^2 + 2pq + q^2 = 1.0",
+        defaultParams: { dominantRatio: 0.6 },
+        paramsList: [{ key: "dominantRatio", label: "Dominant Allele Frequency (p)", min: 0.05, max: 0.95, step: 0.05 }]
+      },
+      {
+        id: "photosynthesis",
+        name: "Chlorophyll Photon Absorption",
+        desc: "Observe the energetic rate of photon capture and carbon conversion processes.",
+        equation: "Rate \\propto Light \\cdot CO_2",
+        defaultParams: { lightIntensity: 8, co2Level: 4 },
+        paramsList: [
+          { key: "lightIntensity", label: "Light Flux (lux)", min: 1, max: 12, step: 0.5 },
+          { key: "co2Level", label: "Carbon Concent (PPM)", min: 1, max: 8, step: 0.5 }
+        ]
+      },
+      {
+        id: "enzymes",
+        name: "Lock & Key Reaction Kinetic",
+        desc: "Observe metabolic reaction speeds saturating enzyme active sites.",
+        equation: "v = \\frac{V_{max} \\cdot [S]}{K_m + [S]}",
+        defaultParams: { substrateConc: 5, enzymeConc: 3 },
+        paramsList: [
+          { key: "substrateConc", label: "Substrate Count [S]", min: 1, max: 12, step: 0.5 },
+          { key: "enzymeConc", label: "Enzyme Concentration", min: 1, max: 8, step: 0.5 }
+        ]
+      },
+      {
+        id: "osmosis",
+        name: "Semi-permeable Membrane Fluid",
+        desc: "Examine water molecules moving across membrane barriers to balance solute pressures.",
+        equation: "\\Pi = i \\cdot M \\cdot R \\cdot T",
+        defaultParams: { soluteRatio: 4 },
+        paramsList: [{ key: "soluteRatio", label: "Intracellular Salt (%)", min: 1, max: 8, step: 0.2 }]
+      },
+      {
+        id: "ecosystem",
+        name: "Predator-Prey Lotka-Volterra",
+        desc: "Model dynamic oscillations as populations balance hunting frequencies.",
+        equation: "\\frac{dx}{dt} = \\alpha x - \\beta x y",
+        defaultParams: { preyPopulation: 60, predatorPopulation: 15 },
+        paramsList: [
+          { key: "preyPopulation", label: "Primary Herbivores (x)", min: 20, max: 100, step: 5 },
+          { key: "predatorPopulation", label: "Apex Predators (y)", min: 5, max: 35, step: 1 }
+        ]
       }
     ]
   },
@@ -159,6 +291,61 @@ const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, {
           { key: "vesselRadius", label: "Lumen Radius (r)", min: 1, max: 5, step: 0.1 },
           { key: "bloodPressure", label: "Perfusion Pressure (\u0394P)", min: 50, max: 150, step: 5 }
         ]
+      },
+      {
+        id: "nephron",
+        name: "Glomerular Renal Filtration",
+        desc: "Observe dynamic capillary blood filtering across Bowman capsule glomeruli.",
+        equation: "GFR = K_f \\cdot (P_g - P_b - \\pi_g)",
+        defaultParams: { filterPressure: 45, urineResistance: 12 },
+        paramsList: [
+          { key: "filterPressure", label: "Glomerular Pressure (P\u1d62)", min: 30, max: 70, step: 1 },
+          { key: "urineResistance", label: "Bowman Resistance (P\u1d47)", min: 5, max: 25, step: 0.5 }
+        ]
+      },
+      {
+        id: "pulmonary",
+        name: "Alveolar Gas Exchange",
+        desc: "Examine oxygen diffusion across thin wet respiratory cell borders.",
+        equation: "V_{gas} \\propto \\frac{A \\cdot D \\cdot \\Delta P}{T}",
+        defaultParams: { oxygenPartialPress: 104, barrierThickness: 2 },
+        paramsList: [
+          { key: "oxygenPartialPress", label: "Alveolar O\u2082 Pressure (\u0394P)", min: 60, max: 130, step: 2 },
+          { key: "barrierThickness", label: "Membrane Width (T \u03bcm)", min: 1, max: 5, step: 0.2 }
+        ]
+      },
+      {
+        id: "muscle",
+        name: "Actomyosin Cross-Bridge Slide",
+        desc: "Examine sliding sarcomere fibers contracting on calcium ion updates.",
+        equation: "F = F_0 \\left(1 - \\frac{v}{v_{max}}\\right)",
+        defaultParams: { calciumLevel: 5, atpAvailability: 8 },
+        paramsList: [
+          { key: "calciumLevel", label: "Intracellular Ca\u00b2\u207a ions", min: 1, max: 10, step: 0.5 },
+          { key: "atpAvailability", label: "ATP Energy concentration", min: 2, max: 12, step: 0.5 }
+        ]
+      },
+      {
+        id: "endocrine",
+        name: "Insulin Glucose Hormonal Loop",
+        desc: "Observe systemic loops adjusting blood sugar via beta-cell insulin updates.",
+        equation: "\\frac{dG}{dt} = I_{prod} - I_{util} \\cdot G",
+        defaultParams: { carbIntake: 60, insulinSensitivity: 4 },
+        paramsList: [
+          { key: "carbIntake", label: "Carb Load (g)", min: 10, max: 120, step: 5 },
+          { key: "insulinSensitivity", label: "Insulin Affinity", min: 1, max: 8, step: 0.2 }
+        ]
+      },
+      {
+        id: "bone",
+        name: "Osteoblast Calcium Deposit",
+        desc: "Model dynamic bone remodeling mineral deposition ratios.",
+        equation: "Bone_{mass} \\propto D_3 \\cdot Cal",
+        defaultParams: { calciumIntake: 8, vitaminD: 5 },
+        paramsList: [
+          { key: "calciumIntake", label: "Dietary Calcium (mg)", min: 2, max: 15, step: 0.5 },
+          { key: "vitaminD", label: "Vitamin D\u2083 index", min: 1, max: 10, step: 0.5 }
+        ]
       }
     ]
   },
@@ -198,6 +385,46 @@ const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, {
           { key: "nodesCount", label: "Vertices (n)", min: 10, max: 50, step: 1 },
           { key: "connectionProbability", label: "Link Probability (p)", min: 0, max: 0.5, step: 0.01 }
         ]
+      },
+      {
+        id: "chaos",
+        name: "Lorenz Chaotic Attractor",
+        desc: "Model dynamic butterfly effects as trajectories orbit triple-dimensional attractors.",
+        equation: "\\sigma=10, \\rho=28, \\beta=8/3",
+        defaultParams: { chaosRho: 28 },
+        paramsList: [{ key: "chaosRho", label: "Rayleigh Factor (\u03c1)", min: 14, max: 40, step: 0.5 }]
+      },
+      {
+        id: "fractal",
+        name: "Mandelbrot Iteration Plane",
+        desc: "Observe dynamic complex sets rendering infinite geometric boundaries.",
+        equation: "z_{n+1} = z_n^2 + c",
+        defaultParams: { iterationsLimit: 40 },
+        paramsList: [{ key: "iterationsLimit", label: "Depth Iterations (n)", min: 10, max: 80, step: 2 }]
+      },
+      {
+        id: "fourier",
+        name: "Sine Harmonic Synthesizer",
+        desc: "Overlap discrete sine frequencies to build perfect square, triangle, or sawtooth waves.",
+        equation: "f(t) = \\sum A_n \\sin(n \\omega t)",
+        defaultParams: { harmonicCount: 3 },
+        paramsList: [{ key: "harmonicCount", label: "Harmonic Iterations (n)", min: 1, max: 12, step: 1 }]
+      },
+      {
+        id: "calculus",
+        name: "Riemann Integral Area",
+        desc: "Observe sub-divided rectangle areas summing closer to exact curve integration boundaries.",
+        equation: "\\int_a^b f(x) dx \\approx \\sum f(x_i) \\Delta x",
+        defaultParams: { rectanglesCount: 16 },
+        paramsList: [{ key: "rectanglesCount", label: "Subdivisions (n columns)", min: 4, max: 48, step: 2 }]
+      },
+      {
+        id: "fibonacci",
+        name: "Golden Spiral Growth",
+        desc: "Watch shell patterns trace the mathematical logarithmic spiral limits.",
+        equation: "\\phi = \\frac{1+\\sqrt{5}}{2} \\approx 1.618",
+        defaultParams: { spiralScale: 4 },
+        paramsList: [{ key: "spiralScale", label: "Growth Vector Scale", min: 1, max: 8, step: 0.2 }]
       }
     ]
   },
@@ -226,6 +453,60 @@ const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, {
         equation: "\\Delta x \\cdot \\Delta p \\ge \\frac{\\hbar}{2}",
         defaultParams: { positionSpread: 1.5 },
         paramsList: [{ key: "positionSpread", label: "Spatial Spread (\u0394x)", min: 0.4, max: 4.0, step: 0.1 }]
+      },
+      {
+        id: "tunneling",
+        name: "Potential Barrier Tunneling",
+        desc: "Observe finite probability waves leaking through mathematically forbidden barriers.",
+        equation: "T \\approx e^{-2\\kappa a}",
+        defaultParams: { barrierHeight: 8, particleEnergy: 4 },
+        paramsList: [
+          { key: "barrierHeight", label: "Barrier Voltage (V\u2080)", min: 5, max: 15, step: 0.5 },
+          { key: "particleEnergy", label: "Incident Energy (E)", min: 1, max: 10, step: 0.5 }
+        ]
+      },
+      {
+        id: "spin",
+        name: "Bloch Sphere Qubit Spin",
+        desc: "Rotate a unitary state qubit vectors across latitude and longitude lines.",
+        equation: "|\\psi\\rangle = \\cos\\frac{\\theta}{2}|0\\rangle + e^{i\\phi}\\sin\\frac{\\theta}{2}|1\\rangle",
+        defaultParams: { spinTheta: 90, spinPhi: 45 },
+        paramsList: [
+          { key: "spinTheta", label: "Latitude Angle (\u03b8\u00b0)", min: 0, max: 180, step: 5 },
+          { key: "spinPhi", label: "Phase Angle (\u03c6\u00b0)", min: 0, max: 360, step: 10 }
+        ]
+      },
+      {
+        id: "entanglement",
+        name: "Bell State Spooky Core",
+        desc: "Examine quantum correlation distributions between entangled particles.",
+        equation: "|\\Phi^+\\rangle = \\frac{|00\\rangle + |11\\rangle}{\\sqrt{2}}",
+        defaultParams: { correlationAngle: 45 },
+        paramsList: [{ key: "correlationAngle", label: "Measurement Angle (\u03b8\u00b0)", min: 0, max: 90, step: 5 }]
+      },
+      {
+        id: "hydrogen",
+        name: "Bohr Atomic Radius",
+        desc: "Observe stable quantized hydrogen electron orbit shells.",
+        equation: "r_n = n^2 \\cdot a_0",
+        defaultParams: { quantumNumber: 2 },
+        paramsList: [{ key: "quantumNumber", label: "Principal Shell (n)", min: 1, max: 5, step: 1 }]
+      },
+      {
+        id: "harmonic",
+        name: "Quantum Harmonic Wave",
+        desc: "Graph parabolic well energy states matching Hermite polynomial packets.",
+        equation: "E_n = (n + 1/2)\\hbar\\omega",
+        defaultParams: { oscillatorEnergy: 1 },
+        paramsList: [{ key: "oscillatorEnergy", label: "Vibrational State (n)", min: 0, max: 4, step: 1 }]
+      },
+      {
+        id: "superposition",
+        name: "Dual State Collapse",
+        desc: "Watch coherent dual states collapse instantly to definite values on measurement.",
+        equation: "|\\psi\\rangle = \\alpha|0\\rangle + \\beta|1\\rangle",
+        defaultParams: { probabilityAlpha: 50 },
+        paramsList: [{ key: "probabilityAlpha", label: "State |0\u27e9 Weight (%)", min: 0, max: 100, step: 5 }]
       }
     ]
   },
@@ -265,1165 +546,72 @@ const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, {
         equation: "M_{initial} \\implies remnants",
         defaultParams: { initialMass: 8 },
         paramsList: [{ key: "initialMass", label: "Initial Birth Mass (M\u2609)", min: 0.1, max: 40, step: 0.5 }]
+      },
+      {
+        id: "cosmology",
+        name: "Hubble Expanding Universe",
+        desc: "Observe dynamic Doppler galaxy redshifting relative to cosmic expansion boundaries.",
+        equation: "v = H_0 \\cdot d",
+        defaultParams: { hubbleConstant: 70 },
+        paramsList: [{ key: "hubbleConstant", label: "Hubble Constant (H\u2080)", min: 50, max: 90, step: 2 }]
+      },
+      {
+        id: "nebula",
+        name: "Jeans Nebula Collapse",
+        desc: "Observe how gas pressure balances thermal limits to trigger dust star collapse.",
+        equation: "M_J \\propto T^{3/2} \\cdot \\rho^{-1/2}",
+        defaultParams: { dustDensity: 4, gasTemp: 20 },
+        paramsList: [
+          { key: "dustDensity", label: "Gas Core Density (\u03c1)", min: 1, max: 10, step: 0.5 },
+          { key: "gasTemp", label: "Cloud Temperature (T K)", min: 5, max: 50, step: 1 }
+        ]
+      },
+      {
+        id: "tides",
+        name: "Lunar Tidal Bulge Pull",
+        desc: "Model dynamic planetary ocean bulge elevations pulled by gravity.",
+        equation: "F_{tidal} \\propto \\frac{M_{moon}}{d^3}",
+        defaultParams: { moonDistance: 8 },
+        paramsList: [{ key: "moonDistance", label: "Orbital Distance (d Earth radii)", min: 4, max: 15, step: 0.5 }]
+      },
+      {
+        id: "magnetosphere",
+        name: "Solar Wind Deflection",
+        desc: "Observe planetary core dipoles redirecting high-energy coronal mass ions.",
+        equation: "r_{magneto} \\propto B^{1/3}",
+        defaultParams: { windVelocity: 5, fieldStrength: 8 },
+        paramsList: [
+          { key: "windVelocity", label: "Solar Wind Speed (v)", min: 1, max: 10, step: 0.5 },
+          { key: "fieldStrength", label: "Core Dipole Power (B)", min: 2, max: 15, step: 0.5 }
+        ]
+      },
+      {
+        id: "pulsar",
+        name: "Relativistic Pulsar Jet",
+        desc: "Examine high-speed magnetic field rotations emitting massive radio cones.",
+        equation: "P_{spin} \\approx ms",
+        defaultParams: { rotationSpeed: 6 },
+        paramsList: [{ key: "rotationSpeed", label: "Spin Period (milliseconds)", min: 1, max: 20, step: 0.5 }]
       }
     ]
   }
 };
 
-// ============================================================================
-// DECOUPLED PURE JS/TS SCIENTIFIC SIMULATION ENGINE
-// ============================================================================
-class SimulationEngine {
-  public canvas: HTMLCanvasElement;
-  public ctx: CanvasRenderingContext2D;
-  public domain: string;
-  public simId: string;
-  public parameters: Record<string, number> = {};
-  public stateSnapshot: Record<string, any> = {};
-  public isRunning: boolean = true;
-  public timeStep: number = 0;
-
-  // High-DPI logical dimensions (separate from canvas pixel buffer)
-  private logicalW: number = 760;
-  private logicalH: number = 480;
-  
-  private animId: number | null = null;
-  private onStateSync: (snap: Record<string, any>) => void;
-  private lastSyncTime: number = 0;
-
-  // Particle databases and mathematical coordinates (Survives React re-renders)
-  private sirParticles: Array<{ x: number; y: number; vx: number; vy: number; state: 'S' | 'I' | 'R'; timer: number }> = [];
-  private wbcList: Array<{ x: number; y: number; vx: number; vy: number }> = [];
-  private pathogenList: Array<{ x: number; y: number; vx: number; vy: number; active: boolean }> = [];
-  private beadsList: Array<{ x: number; y: number; vx: number; vy: number; settled: boolean; bin?: number }> = [];
-  private bins: number[] = Array(15).fill(0);
-  private nodesList: Array<{ x: number; y: number; vx: number; vy: number }> = [];
-  
-  // Custom positions
-  private boxX: number = 60;
-  private boxVel: number = 0;
-  private axonProgress: number = 0;
-
-  constructor(
-    canvas: HTMLCanvasElement, 
-    domain: string, 
-    simId: string, 
-    params: Record<string, number>,
-    onStateSync: (snap: Record<string, any>) => void
-  ) {
-    this.canvas = canvas;
-    this.ctx = canvas.getContext('2d', { alpha: false })!;
-    this.domain = domain;
-    this.simId = simId;
-    this.parameters = { ...params };
-    this.onStateSync = onStateSync;
-
-    // Initialize logical dimensions from the CSS-rendered container size
-    this.logicalW = canvas.clientWidth || 760;
-    this.logicalH = canvas.clientHeight || 480;
-    this.applyDprResize();
-    
-    this.initSubSimData();
-  }
-
-  // SIM-BUG-001: Apply physical pixel buffer scaling for Retina/High-DPI displays
-  private applyDprResize() {
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
-    const lw = this.canvas.clientWidth || this.logicalW;
-    const lh = this.canvas.clientHeight || this.logicalH;
-    const targetW = Math.round(lw * dpr);
-    const targetH = Math.round(lh * dpr);
-    if (this.canvas.width !== targetW || this.canvas.height !== targetH) {
-      this.canvas.width = targetW;
-      this.canvas.height = targetH;
-      this.logicalW = lw;
-      this.logicalH = lh;
-      // Clamp existing particles into new bounds
-      this.clampParticlesToBounds(lw, lh);
-    }
-  }
-
-  // Gracefully keep all live particles within the new logical canvas bounds on resize
-  private clampParticlesToBounds(lw: number, lh: number) {
-    const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
-    this.sirParticles.forEach(p => { p.x = clamp(p.x, 20, lw - 20); p.y = clamp(p.y, 20, lh - 20); });
-    this.wbcList.forEach(p => { p.x = clamp(p.x, 20, lw - 20); p.y = clamp(p.y, 20, lh - 20); });
-    this.pathogenList.forEach(p => { p.x = clamp(p.x, 20, lw - 20); p.y = clamp(p.y, 20, lh - 20); });
-    this.nodesList.forEach(p => { p.x = clamp(p.x, 20, lw - 20); p.y = clamp(p.y, 20, lh - 20); });
-  }
-
-  // SIM-BUG-007: Respect externally-set isRunning state instead of force-overriding to true
-  public start() {
-    if (!this.animId) {
-      this.tick(0);
-    }
-  }
-
-  public stop() {
-    this.isRunning = false;
-  }
-
-  public resetTime() {
-    this.timeStep = 0;
-    this.boxX = 60;
-    this.boxVel = 0;
-    this.axonProgress = 0;
-    this.initSubSimData();
-  }
-
-  public destroy() {
-    if (this.animId) {
-      cancelAnimationFrame(this.animId);
-      this.animId = null;
-    }
-  }
-
-  public updateParameter(key: string, value: number) {
-    this.parameters[key] = value;
-    
-    // Dynamic resets for specific parameter boundaries
-    if (this.simId === 'immune' && (key === 'pathogenCount' || key === 'wbcCount')) {
-      this.initSubSimData();
-    } else if (this.simId === 'graph' && key === 'nodesCount') {
-      this.initSubSimData();
-    } else if (this.simId === 'probability' && key === 'beadsCount') {
-      this.beadsList = [];
-      this.bins.fill(0);
-    }
-  }
-
-  private initSubSimData() {
-    const w = this.logicalW;
-    const h = this.logicalH;
-
-    if (this.simId === 'immune') {
-      this.wbcList = [];
-      this.pathogenList = [];
-      const wc = this.parameters.wbcCount || 15;
-      const pc = this.parameters.pathogenCount || 40;
-
-      for (let i = 0; i < wc; i++) {
-        this.wbcList.push({
-          x: Math.random() * (w - 100) + 50,
-          y: Math.random() * (h - 100) + 50,
-          vx: (Math.random() - 0.5) * 1.8,
-          vy: (Math.random() - 0.5) * 1.8
-        });
-      }
-
-      for (let i = 0; i < pc; i++) {
-        this.pathogenList.push({
-          x: Math.random() * (w - 100) + 50,
-          y: Math.random() * (h - 100) + 50,
-          vx: (Math.random() - 0.5) * 2.8,
-          vy: (Math.random() - 0.5) * 2.8,
-          active: true
-        });
-      }
-    } else if (this.simId === 'virus') {
-      // SIM-BUG-005: Respect populationSize parameter for configurable particle density
-      const pop = Math.round(this.parameters.populationSize ?? 120);
-      this.sirParticles = [];
-      for (let i = 0; i < pop; i++) {
-        this.sirParticles.push({
-          x: Math.random() * (w - 40) + 20,
-          y: Math.random() * (h - 60) + 40,
-          vx: (Math.random() - 0.5) * 2.2,
-          vy: (Math.random() - 0.5) * 2.2,
-          state: i < 3 ? 'I' : 'S',
-          timer: 0
-        });
-      }
-    } else if (this.simId === 'probability') {
-      this.beadsList = [];
-      this.bins.fill(0);
-    } else if (this.simId === 'graph') {
-      this.nodesList = [];
-      const nodes = this.parameters.nodesCount || 30;
-      const cx = w / 2;
-      const cy = h / 2;
-      for (let i = 0; i < nodes; i++) {
-        this.nodesList.push({
-          x: cx + Math.cos(i * (Math.PI * 2 / nodes)) * 95 + (Math.random() - 0.5) * 15,
-          y: cy + Math.sin(i * (Math.PI * 2 / nodes)) * 95 + (Math.random() - 0.5) * 15,
-          vx: 0,
-          vy: 0
-        });
-      }
-    }
-  }
-
-  // Unified RequestAnimationFrame loop
-  private tick = (timestamp: number) => {
-    if (this.isRunning) {
-      this.timeStep++;
-      
-      // Perform math simulation computations
-      this.updatePhysics();
-    }
-    
-    // Core render execution
-    this.draw();
-
-    // Throttled UI Sync Callback (Max 30 FPS / ~33ms) to bypass React state bottlenecks
-    if (timestamp - this.lastSyncTime > 33) {
-      this.onStateSync({
-        timeStep: this.timeStep,
-        stateSnapshot: { ...this.stateSnapshot }
-      });
-      this.lastSyncTime = timestamp;
-    }
-
-    this.animId = requestAnimationFrame(this.tick);
-  }
-
-  private updatePhysics() {
-    const w = this.logicalW;
-    const h = this.logicalH;
-
-    switch (this.simId) {
-      case 'motion': {
-        const force = this.parameters.force ?? 15;
-        const mass = this.parameters.mass ?? 5;
-        const friction = this.parameters.friction ?? 0.2;
-        const F_friction = friction * mass * 9.8;
-        const F_net = Math.max(0, force - F_friction);
-        const acc = F_net / mass;
-
-        this.boxX += this.boxVel;
-        this.boxVel += acc * 0.03;
-
-        if (force === 0 && this.boxVel > 0) {
-          this.boxVel = Math.max(0, this.boxVel - (F_friction / mass) * 0.03);
-        }
-
-        const blockW = 50 + mass * 1.5;
-        if (this.boxX > w) {
-          this.boxX = -blockW;
-        }
-
-        this.stateSnapshot = {
-          acceleration: acc,
-          velocity: this.boxVel * 4,
-          frictionalForce: F_friction
-        };
-        break;
-      }
-
-      case 'bacteria': {
-        const temp = this.parameters.temperature ?? 37;
-        const nutrient = this.parameters.nutrientLevel ?? 6;
-        const growthConstant = Math.max(0, Math.exp(-Math.pow(temp - 37, 2) / (2 * Math.pow(12, 2))));
-        const capacity = nutrient * 40;
-
-        const currentPop = this.stateSnapshot.population ?? 5;
-        const nextPop = Math.min(capacity, currentPop + (growthConstant * 0.05 * currentPop * (1 - currentPop / capacity)));
-        
-        this.stateSnapshot = {
-          population: nextPop,
-          growthRate: growthConstant
-        };
-        break;
-      }
-
-      case 'virus': {
-        const trans = this.parameters.transmissionRate ?? 0.5;
-        const rec = this.parameters.recoveryRate ?? 0.1;
-
-        const boxW = 400;
-        const boxH = 190;
-        const bx = (w - boxW) / 2;
-        const by = 80;
-
-        let infected = 0;
-        let recovered = 0;
-        let susceptible = 0;
-
-        this.sirParticles.forEach((p) => {
-          p.x += p.vx;
-          p.y += p.vy;
-
-          if (p.x < bx || p.x > bx + boxW) { p.vx *= -1; p.x = Math.max(bx, Math.min(bx + boxW, p.x)); }
-          if (p.y < by || p.y > by + boxH) { p.vy *= -1; p.y = Math.max(by, Math.min(by + boxH, p.y)); }
-
-          if (p.state === 'I') {
-            infected++;
-            p.timer++;
-
-            if (p.timer > (1 / rec) * 12) {
-              p.state = 'R';
-            }
-
-            this.sirParticles.forEach((other) => {
-              if (other.state === 'S') {
-                const distSq = Math.pow(p.x - other.x, 2) + Math.pow(p.y - other.y, 2);
-                if (distSq < 80 && Math.random() < trans * 0.04) {
-                  other.state = 'I';
-                  other.timer = 0;
-                }
-              }
-            });
-          } else if (p.state === 'S') {
-            susceptible++;
-          } else {
-            recovered++;
-          }
-        });
-
-        this.stateSnapshot = {
-          susceptible,
-          infected,
-          recovered,
-          r0: trans / rec
-        };
-        break;
-      }
-
-      case 'immune': {
-        let pathLeft = 0;
-
-        this.pathogenList.forEach((pat) => {
-          if (!pat.active) return;
-          pathLeft++;
-
-          pat.x += pat.vx;
-          pat.y += pat.vy;
-
-          if (pat.x < 15 || pat.x > w - 15) pat.vx *= -1;
-          if (pat.y < 15 || pat.y > h - 15) pat.vy *= -1;
-        });
-
-        this.wbcList.forEach((wbc) => {
-          let target = null;
-          let minDist = 99999;
-
-          this.pathogenList.forEach((pat) => {
-            if (!pat.active) return;
-            const d = Math.pow(wbc.x - pat.x, 2) + Math.pow(wbc.y - pat.y, 2);
-            if (d < minDist) {
-              minDist = d;
-              target = pat;
-            }
-          });
-
-          if (target) {
-            const dx = (target as any).x - wbc.x;
-            const dy = (target as any).y - wbc.y;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist > 0) {
-              wbc.vx = (wbc.vx + (dx / dist) * 0.15) * 0.95;
-              wbc.vy = (wbc.vy + (dy / dist) * 0.15) * 0.95;
-            }
-
-            wbc.x += wbc.vx;
-            wbc.y += wbc.vy;
-
-            if (dist < 10) {
-              (target as any).active = false;
-            }
-          }
-        });
-
-        this.stateSnapshot = {
-          pathogensRemaining: pathLeft,
-          wbcUnits: this.wbcList.length
-        };
-        break;
-      }
-
-      case 'probability': {
-        const N = this.parameters.beadsCount ?? 200;
-        const cx = w / 2;
-        const startY = 70;
-        const spacing = 18;
-        const rows = 8;
-
-        if (this.timeStep % 8 === 0 && this.beadsList.length < N) {
-          this.beadsList.push({
-            x: cx + (Math.random() - 0.5) * 4,
-            y: startY - 20,
-            vx: 0,
-            vy: 1.5,
-            settled: false
-          });
-        }
-
-        this.beadsList.forEach((b) => {
-          if (b.settled) return;
-
-          b.y += b.vy;
-          b.x += b.vx;
-          b.vx *= 0.95;
-
-          // peg row collisions
-          for (let r = 0; r < rows; r++) {
-            const py = startY + r * spacing;
-            const pins = r + 1;
-            const startX = cx - (r * spacing) / 2;
-
-            for (let p = 0; p < pins; p++) {
-              const px = startX + p * spacing;
-              const distSq = Math.pow(b.x - px, 2) + Math.pow(b.y - py, 2);
-              if (distSq < 48 && b.y < py + 2) {
-                b.y = py - 2;
-                b.vy = 1.0;
-                b.vx = Math.random() > 0.5 ? 1.6 : -1.6;
-              }
-            }
-          }
-
-          const bottomY = startY + rows * spacing + 15;
-          if (b.y >= bottomY) {
-            b.settled = true;
-            const binIdx = Math.max(0, Math.min(this.bins.length - 1, Math.floor((b.x - (cx - 75)) / 10)));
-            this.bins[binIdx]++;
-            b.bin = binIdx;
-          }
-        });
-
-        this.stateSnapshot = {
-          beadsSettled: this.beadsList.filter(b => b.settled).length
-        };
-        break;
-      }
-
-      case 'graph': {
-        // SIM-BUG-003: O(n²/2) Symmetric Repulsion Forces — halves distance calculations per frame
-        const nodeCount = this.parameters.nodesCount ?? 30;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        for (let i = 0; i < nodeCount; i++) {
-          const n1 = this.nodesList[i];
-          if (!n1) continue;
-
-          for (let j = i + 1; j < nodeCount; j++) {
-            const n2 = this.nodesList[j];
-            if (!n2) continue;
-
-            const dx = n1.x - n2.x;
-            const dy = n1.y - n2.y;
-            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-
-            if (dist < 100) {
-              // Apply Newton's 3rd Law — equal and opposite — one sqrt per pair
-              const fx = (dx / dist) * (30 / dist);
-              const fy = (dy / dist) * (30 / dist);
-              n1.vx += fx;
-              n1.vy += fy;
-              n2.vx -= fx;
-              n2.vy -= fy;
-            }
-          }
-
-          // Gravity towards center and velocity integration
-          const dcx = cx - n1.x;
-          const dcy = cy - n1.y;
-          n1.vx += dcx * 0.015;
-          n1.vy += dcy * 0.015;
-
-          n1.x += n1.vx;
-          n1.y += n1.vy;
-          n1.vx *= 0.85;
-          n1.vy *= 0.85;
-        }
-        break;
-      }
-    }
-  }
-
-  private draw() {
-    // SIM-BUG-001: Apply Retina/High-DPI DPR resize and logical scaling
-    this.applyDprResize();
-    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
-
-    const ctx = this.ctx;
-    const w = this.logicalW;  // Logical width (CSS pixels)
-    const h = this.logicalH;  // Logical height (CSS pixels)
-    const t = this.timeStep;
-
-    // Scale context so all draw calls use logical pixel coordinates
-    ctx.save();
-    ctx.scale(dpr, dpr);
-
-    // Dark Scientific Theme Base
-    ctx.fillStyle = "#030305";
-    ctx.fillRect(0, 0, w, h);
-
-    // Subtle Spacing Grid (8px grid aligned)
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.012)";
-    ctx.lineWidth = 1;
-    const gridSize = 16;
-    for (let x = 0; x < w; x += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, h);
-      ctx.stroke();
-    }
-    for (let y = 0; y < h; y += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
-
-    ctx.save();
-
-    switch (this.simId) {
-      case 'relativity': {
-        const v = this.parameters.speed ?? 0.5;
-        const gamma = 1 / Math.sqrt(1 - v * v);
-        
-        // Clock A
-        ctx.beginPath();
-        ctx.arc(140, 160, 45, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(59, 130, 246, 0.25)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        
-        const angleA = (t * 0.04) % (Math.PI * 2);
-        ctx.beginPath();
-        ctx.moveTo(140, 160);
-        ctx.lineTo(140 + Math.cos(angleA) * 35, 160 + Math.sin(angleA) * 35);
-        ctx.strokeStyle = "#3b82f6";
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        ctx.fillStyle = "rgba(255,255,255,0.7)";
-        ctx.font = "bold 9px monospace";
-        ctx.fillText("FRAME A (STATIONARY)", 85, 225);
-        ctx.fillText("Clock rate: 1.00 ticks", 88, 238);
-
-        // Clock B (Dilated)
-        const bx = w - 140;
-        ctx.beginPath();
-        ctx.arc(bx, 160, 45, 0, Math.PI * 2);
-        ctx.strokeStyle = "rgba(167, 139, 250, 0.25)";
-        ctx.lineWidth = 2;
-        ctx.stroke();
-
-        const angleB = (t * 0.04 * (1 / gamma)) % (Math.PI * 2);
-        ctx.beginPath();
-        ctx.moveTo(bx, 160);
-        ctx.lineTo(bx + Math.cos(angleB) * 35, 160 + Math.sin(angleB) * 35);
-        ctx.strokeStyle = "#a78bfa";
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        ctx.fillStyle = "rgba(255,255,255,0.7)";
-        ctx.fillText("FRAME B (RELATIVISTIC)", bx - 55, 225);
-        ctx.fillText(`v/c = ${v.toFixed(2)}c`, bx - 22, 238);
-        ctx.fillText(`Dilation: ${gamma.toFixed(3)}x`, bx - 35, 251);
-
-        // Length contraction visual
-        const baseLength = 200;
-        const conLength = baseLength / gamma;
-        ctx.strokeStyle = "rgba(255,255,255,0.05)";
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.moveTo(150, 70);
-        ctx.lineTo(150 + baseLength, 70);
-        ctx.stroke();
-
-        ctx.strokeStyle = "#60a5fa";
-        ctx.lineWidth = 6;
-        ctx.beginPath();
-        ctx.moveTo(150, 70);
-        ctx.lineTo(150 + conLength, 70);
-        ctx.stroke();
-
-        ctx.fillStyle = "#60a5fa";
-        ctx.fillText(`Lorentz length: ${(conLength/baseLength*100).toFixed(1)}%`, 210, 55);
-        break;
-      }
-
-      case 'motion': {
-        const force = this.parameters.force ?? 15;
-        const mass = this.parameters.mass ?? 5;
-        const friction = this.parameters.friction ?? 0.2;
-        const F_friction = friction * mass * 9.8;
-        const acc = Math.max(0, force - F_friction) / mass;
-
-        const blockW = 50 + mass * 1.5;
-        const blockH = 30;
-        const groundY = 200;
-
-        // Ground track line
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, groundY);
-        ctx.lineTo(w, groundY);
-        ctx.stroke();
-
-        // Sliding block
-        ctx.fillStyle = "rgba(245, 158, 11, 0.05)";
-        ctx.fillRect(this.boxX, groundY - blockH, blockW, blockH);
-        ctx.strokeStyle = "#f59e0b";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(this.boxX, groundY - blockH, blockW, blockH);
-
-        // Vector Force Vector
-        if (force > 0) {
-          ctx.strokeStyle = "#fbbf24";
-          ctx.lineWidth = 2.5;
-          ctx.beginPath();
-          ctx.moveTo(this.boxX + blockW, groundY - blockH/2);
-          ctx.lineTo(this.boxX + blockW + force * 2.2, groundY - blockH/2);
-          ctx.stroke();
-          
-          ctx.fillStyle = "#fbbf24";
-          ctx.beginPath();
-          ctx.moveTo(this.boxX + blockW + force * 2.2, groundY - blockH/2);
-          ctx.lineTo(this.boxX + blockW + force * 2.2 - 6, groundY - blockH/2 - 4);
-          ctx.lineTo(this.boxX + blockW + force * 2.2 - 6, groundY - blockH/2 + 4);
-          ctx.fill();
-        }
-        break;
-      }
-
-      case 'gravity': {
-        const radius = (this.parameters.orbitalRadius ?? 8) * 16;
-        const mass = this.parameters.centralMass ?? 150;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        // Central Mass Stellar base
-        const stellarR = 15 + mass * 0.04;
-        ctx.fillStyle = "rgba(239, 68, 68, 0.15)";
-        ctx.beginPath();
-        ctx.arc(cx, cy, stellarR * 1.8, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = "#ef4444";
-        ctx.beginPath();
-        ctx.arc(cx, cy, stellarR, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Orbit path
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
-        ctx.lineWidth = 1;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.setLineDash([]);
-
-        const v_calc = Math.sqrt((0.5 * mass) / radius);
-        const theta = t * (v_calc * 0.015);
-        const px = cx + Math.cos(theta) * radius;
-        const py = cy + Math.sin(theta) * radius;
-
-        // Planet
-        ctx.fillStyle = "#3b82f6";
-        ctx.beginPath();
-        ctx.arc(px, py, 6, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-
-      case 'bacteria': {
-        const temp = this.parameters.temperature ?? 37;
-        const nutrient = this.parameters.nutrientLevel ?? 6;
-        const cap = nutrient * 40;
-
-        const currentPop = this.stateSnapshot.population ?? 5;
-        const dishX = w / 2;
-        const dishY = h / 2;
-        const dishR = 110;
-
-        ctx.strokeStyle = "rgba(16, 185, 129, 0.2)";
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(dishX, dishY, dishR, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.fillStyle = "rgba(52, 211, 153, 0.65)";
-        for (let i = 0; i < Math.floor(currentPop); i++) {
-          const angle = (i * 137.5) * (Math.PI / 180);
-          const rFactor = Math.sqrt(i) * 7.5;
-          if (rFactor < dishR - 10) {
-            const bx = dishX + Math.cos(angle) * rFactor;
-            const by = dishY + Math.sin(angle) * rFactor;
-            ctx.beginPath();
-            ctx.ellipse(bx, by, 5, 2.5, angle, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        break;
-      }
-
-      case 'virus': {
-        const boxW = 400;
-        const boxH = 190;
-        const bx = (w - boxW) / 2;
-        const by = 80;
-
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
-        ctx.strokeRect(bx, by, boxW, boxH);
-
-        this.sirParticles.forEach((p) => {
-          if (p.state === 'S') {
-            ctx.fillStyle = "#22d3ee";
-          } else if (p.state === 'I') {
-            ctx.fillStyle = "#f43f5e";
-          } else {
-            ctx.fillStyle = "#34d399";
-          }
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, p.state === 'I' ? 4.5 : 3.5, 0, Math.PI * 2);
-          ctx.fill();
-        });
-        break;
-      }
-
-      case 'immune': {
-        this.pathogenList.forEach((pat) => {
-          if (!pat.active) return;
-          ctx.fillStyle = "#f43f5e";
-          ctx.beginPath();
-          ctx.arc(pat.x, pat.y, 2.5, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        this.wbcList.forEach((wbc) => {
-          ctx.fillStyle = "rgba(52, 211, 153, 0.35)";
-          ctx.strokeStyle = "#34d399";
-          ctx.lineWidth = 1.5;
-          ctx.beginPath();
-          ctx.arc(wbc.x, wbc.y, 9, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.fillStyle = "#047857";
-          ctx.beginPath();
-          ctx.arc(wbc.x, wbc.y, 3.5, 0, Math.PI * 2);
-          ctx.fill();
-        });
-        break;
-      }
-
-      case 'heart': {
-        const bpm = this.parameters.heartRate ?? 72;
-        const sv = this.parameters.strokeVolume ?? 70;
-        const pulsePeriod = 60 / bpm;
-        const pulseTime = (t / 60) % pulsePeriod;
-
-        let scale = 1.0;
-        if (pulseTime < 0.15) {
-          scale = 0.85 + (pulseTime / 0.15) * 0.15;
-        } else if (pulseTime < 0.4) {
-          scale = 1.0 + Math.sin((pulseTime - 0.15) / 0.25 * Math.PI) * 0.15;
-        }
-
-        const hx = w / 2;
-        const hy = h / 2;
-
-        ctx.save();
-        ctx.translate(hx, hy);
-        ctx.scale(scale, scale);
-
-        ctx.beginPath();
-        ctx.moveTo(0, -35);
-        ctx.bezierCurveTo(-45, -75, -75, -25, 0, 45);
-        ctx.bezierCurveTo(75, -25, 45, -75, 0, -35);
-        ctx.fillStyle = "rgba(244, 63, 94, 0.15)";
-        ctx.fill();
-        ctx.strokeStyle = "#f43f5e";
-        ctx.lineWidth = 3;
-        ctx.stroke();
-
-        ctx.restore();
-        break;
-      }
-
-      case 'neural': {
-        const myelin = this.parameters.myelination ?? 2;
-        const sx = 80;
-        const ex = w - 80;
-        const ny = h / 2;
-
-        ctx.strokeStyle = "rgba(255,255,255,0.05)";
-        ctx.lineWidth = 12;
-        ctx.beginPath();
-        ctx.moveTo(sx, ny);
-        ctx.lineTo(ex, ny);
-        ctx.stroke();
-
-        const segments = 4;
-        const segW = (ex - sx) / segments;
-
-        ctx.fillStyle = "rgba(245, 158, 11, 0.15)";
-        ctx.strokeStyle = "rgba(245, 158, 11, 0.4)";
-        ctx.lineWidth = 1.5;
-        for (let i = 0; i < segments; i++) {
-          ctx.fillRect(sx + i * segW + 6, ny - 9, segW - 12, 18);
-          ctx.strokeRect(sx + i * segW + 6, ny - 9, segW - 12, 18);
-        }
-
-        const speed = 2.0 * myelin;
-        this.axonProgress = (this.axonProgress + speed) % (ex - sx + 50);
-        const signalX = sx + this.axonProgress;
-
-        if (signalX < ex) {
-          ctx.fillStyle = "#f59e0b";
-          ctx.shadowColor = "#f59e0b";
-          ctx.shadowBlur = 15;
-          ctx.beginPath();
-          ctx.arc(signalX, ny, 8, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.shadowBlur = 0;
-        }
-        break;
-      }
-
-      case 'blood': {
-        const r = this.parameters.vesselRadius ?? 3;
-        const bp = this.parameters.bloodPressure ?? 100;
-        const cy = h / 2;
-        const vy = r * 15;
-
-        ctx.fillStyle = "rgba(244, 63, 94, 0.03)";
-        ctx.fillRect(0, cy - vy, w, vy * 2);
-
-        ctx.strokeStyle = "rgba(244, 63, 94, 0.35)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(0, cy - vy);
-        ctx.lineTo(w, cy - vy);
-        ctx.moveTo(0, cy + vy);
-        ctx.lineTo(w, cy + vy);
-        ctx.stroke();
-
-        const speed = (bp * r * r) / 80;
-        ctx.fillStyle = "rgba(244, 63, 94, 0.6)";
-        for (let i = 0; i < 20; i++) {
-          const ratio = ((i * 7) % 200 - 100) / 100;
-          const py = cy + ratio * (vy - 5);
-          const localV = speed * (1 - ratio * ratio);
-          const px = (i * 45 + t * localV) % (w + 20) - 10;
-          
-          ctx.beginPath();
-          ctx.ellipse(px, py, 4.5, 3, 0.1, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        break;
-      }
-
-      case 'functions': {
-        const slope = this.parameters.slope ?? 1.5;
-        const amp = this.parameters.amplitude ?? 4;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        ctx.strokeStyle = "rgba(255,255,255,0.08)";
-        ctx.beginPath();
-        ctx.moveTo(40, cy);
-        ctx.lineTo(w - 40, cy);
-        ctx.moveTo(cx, 40);
-        ctx.lineTo(cx, h - 40);
-        ctx.stroke();
-
-        ctx.strokeStyle = "#fbbf24";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let sx = 40; sx < w - 40; sx++) {
-          const mathX = (sx - cx) / 25;
-          const mathY = slope * mathX + amp * Math.sin(mathX);
-          const sy = cy - mathY * 18;
-
-          if (sx === 40) {
-            ctx.moveTo(sx, sy);
-          } else if (sy > 30 && sy < h - 30) {
-            ctx.lineTo(sx, sy);
-          }
-        }
-        ctx.stroke();
-        break;
-      }
-
-      case 'probability': {
-        const cx = w / 2;
-        const startY = 70;
-        const spacing = 18;
-        const rows = 8;
-
-        ctx.fillStyle = "rgba(255,255,255,0.25)";
-        for (let r = 0; r < rows; r++) {
-          const py = startY + r * spacing;
-          const startX = cx - (r * spacing) / 2;
-          for (let p = 0; p <= r; p++) {
-            ctx.beginPath();
-            ctx.arc(startX + p * spacing, py, 2, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-
-        this.beadsList.forEach((b) => {
-          if (b.settled) return;
-          ctx.fillStyle = "#fbbf24";
-          ctx.beginPath();
-          ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
-          ctx.fill();
-        });
-
-        // Bins
-        const bottomY = startY + rows * spacing + 15;
-        ctx.strokeStyle = "rgba(255,255,255,0.1)";
-        for (let i = 0; i < this.bins.length; i++) {
-          const bx = cx - 75 + i * 10;
-          const barH = this.bins[i] * 3;
-          ctx.strokeRect(bx, bottomY, 10, 50);
-
-          ctx.fillStyle = "rgba(251, 191, 36, 0.4)";
-          ctx.fillRect(bx + 1, bottomY + 50 - barH, 8, barH);
-        }
-        break;
-      }
-
-      case 'graph': {
-        const nodes = this.parameters.nodesCount ?? 30;
-        const p = this.parameters.connectionProbability ?? 0.15;
-        
-        ctx.strokeStyle = "rgba(251, 191, 36, 0.12)";
-        ctx.lineWidth = 1;
-        for (let i = 0; i < nodes; i++) {
-          for (let j = i + 1; j < nodes; j++) {
-            const seedVal = Math.sin(i * 12.98 + j * 78.2) * 43758.54;
-            const randVal = seedVal - Math.floor(seedVal);
-            if (randVal < p && this.nodesList[i] && this.nodesList[j]) {
-              ctx.beginPath();
-              ctx.moveTo(this.nodesList[i].x, this.nodesList[i].y);
-              ctx.lineTo(this.nodesList[j].x, this.nodesList[j].y);
-              ctx.stroke();
-            }
-          }
-        }
-
-        this.nodesList.forEach((n) => {
-          ctx.fillStyle = "#fbbf24";
-          ctx.beginPath();
-          ctx.arc(n.x, n.y, 4, 0, Math.PI * 2);
-          ctx.fill();
-        });
-        break;
-      }
-
-      case 'wave': {
-        const n = this.parameters.energyLevel ?? 2;
-        const L = this.parameters.wellWidth ?? 8;
-        const cx = w / 2;
-        const pixels = L * 32;
-        const lx = cx - pixels / 2;
-        const rx = cx + pixels / 2;
-        const cy = h / 2;
-
-        ctx.strokeStyle = "rgba(167, 139, 250, 0.25)";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(lx, 60);
-        ctx.lineTo(lx, cy + 50);
-        ctx.lineTo(rx, cy + 50);
-        ctx.lineTo(rx, 60);
-        ctx.stroke();
-
-        ctx.strokeStyle = "#a78bfa";
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        for (let sx = lx; sx <= rx; sx++) {
-          const ratio = (sx - lx) / pixels;
-          const psi = Math.sqrt(2 / L) * Math.sin(n * Math.PI * ratio);
-          const sy = cy - psi * Math.sin(t * 0.06) * 35;
-
-          if (sx === lx) ctx.moveTo(sx, sy);
-          else ctx.lineTo(sx, sy);
-        }
-        ctx.stroke();
-        break;
-      }
-
-      case 'uncertainty': {
-        const dx = this.parameters.positionSpread ?? 1.5;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        ctx.fillStyle = "rgba(34, 211, 238, 0.02)";
-        ctx.fillRect(cx - dx * 30, cy - 50, dx * 60, 100);
-        ctx.strokeStyle = "rgba(34, 211, 238, 0.15)";
-        ctx.strokeRect(cx - dx * 30, cy - 50, dx * 60, 100);
-
-        ctx.strokeStyle = "#22d3ee";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let sx = cx - 180; sx <= cx + 180; sx++) {
-          const rx = (sx - cx) / 25;
-          const envelope = Math.exp(-Math.pow(rx / dx, 2));
-          const osc = Math.sin(rx * (4.5 / dx) + t * 0.08);
-          const sy = cy - envelope * osc * 45;
-
-          if (sx === cx - 180) ctx.moveTo(sx, sy);
-          else ctx.lineTo(sx, sy);
-        }
-        ctx.stroke();
-        break;
-      }
-
-      case 'orbit': {
-        const a = this.parameters.orbitSemiMajorAxis ?? 10;
-        const sm = this.parameters.starMass ?? 120;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        ctx.fillStyle = "#e0f2fe";
-        ctx.beginPath();
-        ctx.arc(cx, cy, 12, 0, Math.PI * 2);
-        ctx.fill();
-
-        const ra = a * 11;
-        const rb = a * 8.5;
-        ctx.strokeStyle = "rgba(255,255,255,0.05)";
-        ctx.beginPath();
-        ctx.ellipse(cx, cy, ra, rb, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
-        const theta = t * (Math.sqrt(sm) * 0.0018);
-        const px = cx + Math.cos(theta) * ra;
-        const py = cy + Math.sin(theta) * rb;
-
-        ctx.fillStyle = "#22d3ee";
-        ctx.beginPath();
-        ctx.arc(px, py, 5, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-
-      case 'blackhole': {
-        const mass = this.parameters.blackholeMass ?? 10;
-        const dist = this.parameters.probeDistance ?? 22;
-        // SIM-BUG-006: Schwarzschild radius multiplier aligned with backend (2.95 km/M☉ proxy)
-        const rs = mass * 2.95;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        const disk = ctx.createRadialGradient(cx, cy, rs, cx, cy, rs * 2.2);
-        disk.addColorStop(0, 'rgba(245,158,11,0.75)');
-        disk.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = disk;
-        ctx.beginPath();
-        ctx.arc(cx, cy, rs * 2.2, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.fillStyle = "#020617";
-        ctx.beginPath();
-        ctx.arc(cx, cy, rs, 0, Math.PI * 2);
-        ctx.fill();
-
-        const angle = t * 0.015;
-        const pr = dist * 8.5;
-        ctx.fillStyle = rs / pr > 0.4 ? "#ef4444" : "#22d3ee";
-        ctx.beginPath();
-        ctx.arc(cx + Math.cos(angle) * pr, cy + Math.sin(angle) * pr, 5, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-
-      case 'stellar': {
-        const mass = this.parameters.initialMass ?? 8;
-        const cx = w / 2;
-        const cy = h / 2;
-
-        let col = '#fbbf24';
-        let size = 20;
-
-        if (mass < 0.5) { col = '#ef4444'; size = 10; }
-        else if (mass < 8) { col = '#fbbf24'; size = 18; }
-        else if (mass < 25) { col = '#38bdf8'; size = 32; }
-        else { col = '#c084fc'; size = 44; }
-
-        ctx.fillStyle = col;
-        ctx.shadowColor = col;
-        ctx.shadowBlur = 20;
-        ctx.beginPath();
-        ctx.arc(cx, cy, size, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        break;
-      }
-
-      default: {
-        // ====================================================================
-        // DYNAMIC SCIENTIFIC TELEMETRY GRAPHICS (FALLBACK FOR 31 NEW SIMULATIONS)
-        // ====================================================================
-        const cx = w / 2;
-        const cy = h / 2;
-
-        // Vector grid axes
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(40, cy);
-        ctx.lineTo(w - 40, cy);
-        ctx.moveTo(cx, 40);
-        ctx.lineTo(cx, h - 40);
-        ctx.stroke();
-
-        // Color theme mapping dynamically matching the domain slug
-        const domainAccentColors: Record<string, string> = {
-          physics: "#3b82f6",
-          biology: "#10b981",
-          anatomy: "#f43f5e",
-          mathematics: "#fbbf24",
-          quantum: "#c084fc",
-          space: "#22d3ee"
-        };
-        const color = domainAccentColors[this.domain] || "#3b82f6";
-
-        // Read active parameters to drive wave synthesis
-        const paramKeys = Object.keys(this.parameters);
-        const primaryVal = paramKeys.length > 0 ? this.parameters[paramKeys[0]] : 5;
-        const secondaryVal = paramKeys.length > 1 ? this.parameters[paramKeys[1]] : 3;
-
-        // Render beautiful glowing trigonometric lissajous pathway
-        ctx.strokeStyle = color;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 10;
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-
-        for (let sx = 40; sx <= w - 40; sx += 2) {
-          const mathX = (sx - cx) / 25;
-          const mathY = Math.sin(mathX * (primaryVal * 0.3) + t * 0.05) * Math.cos(mathX * 0.15) * (secondaryVal * 8);
-          const sy = cy - mathY;
-          
-          if (sx === 40) ctx.moveTo(sx, sy);
-          else ctx.lineTo(sx, sy);
-        }
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // Orbiter charge tracking the wave dynamically
-        const pulseX = cx + Math.sin(t * 0.015) * (w / 2 - 80);
-        const mathX = (pulseX - cx) / 25;
-        const mathY = Math.sin(mathX * (primaryVal * 0.3) + t * 0.05) * Math.cos(mathX * 0.15) * (secondaryVal * 8);
-        const pulseY = cy - mathY;
-
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(pulseX, pulseY, 5.5, 0, Math.PI * 2);
-        ctx.fill();
-        break;
-      }
-    }
-
-    ctx.restore();
-  }
-}
+// Domain-to-icon fallback map (used when API config omits icon references)
+const DOMAIN_ICONS: Record<ScientificDomain, LucideIcon> = {
+  physics: Atom,
+  biology: Compass,
+  anatomy: Heart,
+  mathematics: Landmark,
+  quantum: Brain,
+  space: Orbit,
+};
 
 // ============================================================================
 // MAIN REAL-TIME SCIENTIFIC SIMULATION ENGINE COMPONENT
 // ============================================================================
 export function SimulationRunner({ slug }: { slug: string }) {
-  const [domainsConfig, setDomainsConfig] = useState<Record<ScientificDomain, any> | null>(null);
+  const [domainsConfig, setDomainsConfig] = useState<Record<ScientificDomain, SimulationDomainConfig> | null>(null);
   const [isLoadingConfig, setIsLoadingConfig] = useState<boolean>(true);
 
   // States
@@ -1435,115 +623,154 @@ export function SimulationRunner({ slug }: { slug: string }) {
 
   // Playback and UI States
   const [isRunning, setIsRunning] = useState<boolean>(true);
-  const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [showHistory, setShowHistory] = useState<boolean>(false);
-  const [historyRuns, setHistoryRuns] = useState<any[]>([]);
+  const [historyRuns, setHistoryRuns] = useState<HistoryRun[]>([]);
 
   // Asynchronous Intel Drawer States
   const [aiOpen, setAiOpen] = useState<boolean>(false);
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
   const [aiStreamText, setAiStreamText] = useState<string>("");
-  const [aiResult, setAiResult] = useState<any>(null);
+  const [aiResult, setAiResult] = useState<HistoryRun['aiInterpretation'] | null>(null);
   const [userQuestion, setUserQuestion] = useState<string>("");
 
   // Live Sync Telemetry Overlay State
-  const [telemetrySnap, setTelemetrySnap] = useState<Record<string, any>>({ timeStep: 0, stateSnapshot: {} });
+  const [telemetrySnap, setTelemetrySnap] = useState<TelemetrySnapshot>({ timeStep: 0, stateSnapshot: {} });
 
   // Slider view parameters
   const [localParams, setLocalParams] = useState<Record<string, number>>({});
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<SimulationEngine | null>(null);
+  const historyCacheRef = useRef<Record<string, HistoryRun[]>>({});
+  const pendingParamUpdatesRef = useRef<Record<string, number>>({});
+  const paramUpdateRafRef = useRef<number | null>(null);
+
+  const activeDomainConfig = useMemo(
+    () => (domainsConfig ? domainsConfig[activeDomain] : null),
+    [domainsConfig, activeDomain]
+  );
+
+  const activeSim = useMemo<SubSimulation | null>(
+    () =>
+      activeDomainConfig
+        ? activeDomainConfig.simulations.find((s) => s.id === activeSimId) || activeDomainConfig.simulations[0]
+        : null,
+    [activeDomainConfig, activeSimId]
+  );
+
+  const isConceptual = useMemo(() => !isInteractiveSim(activeSimId), [activeSimId]);
+
+  const flushPendingEngineUpdates = useCallback(() => {
+    const engine = engineRef.current;
+    const pending = pendingParamUpdatesRef.current;
+    if (!engine || Object.keys(pending).length === 0) return;
+
+    Object.entries(pending).forEach(([key, value]) => {
+      engine.updateParameter(key, value);
+    });
+    pendingParamUpdatesRef.current = {};
+    if (paramUpdateRafRef.current) {
+      cancelAnimationFrame(paramUpdateRafRef.current);
+      paramUpdateRafRef.current = null;
+    }
+  }, []);
+
+  const scheduleEngineParameterUpdate = useCallback((key: string, value: number) => {
+    pendingParamUpdatesRef.current[key] = value;
+    if (paramUpdateRafRef.current === null) {
+      paramUpdateRafRef.current = requestAnimationFrame(() => {
+        flushPendingEngineUpdates();
+      });
+    }
+  }, [flushPendingEngineUpdates]);
+
+  useEffect(() => {
+    return () => {
+      if (paramUpdateRafRef.current) {
+        cancelAnimationFrame(paramUpdateRafRef.current);
+      }
+    };
+  }, []);
 
   // Fetch Database Configurations on mount
   useEffect(() => {
     let isMounted = true;
-    const fetchConfig = async () => {
+    const resolveInitialConfig = async () => {
       try {
-        const response = await fetch("/api/simulations/config");
-        if (response.ok) {
-          const body = await response.json();
-          if (body.success && body.data && body.data.length > 0) {
-            const mapping: any = {};
-            body.data.forEach((item: any) => {
-              const domainIcons: Record<string, any> = {
-                physics: Atom,
-                biology: Compass,
-                anatomy: Heart,
-                mathematics: Landmark,
-                quantum: Brain,
-                space: Orbit
-              };
-              mapping[item.domainKey] = {
-                name: item.name,
-                icon: domainIcons[item.domainKey] || Compass,
-                colorClass: item.colorClass,
-                glowClass: item.glowClass,
-                accentHex: item.accentHex,
-                simulations: item.simulations
-              };
-            });
-            if (isMounted) {
-              setDomainsConfig(mapping);
-              
-              // Set initial active domain & sim slug
-              let initialDomain = 'physics' as ScientificDomain;
-              let initialSimId = 'relativity';
-              
-              for (const [domKey, domConfig] of Object.entries(mapping)) {
-                for (const sim of (domConfig as any).simulations) {
-                  if (slug === sim.id || slug === domKey) {
-                    initialDomain = domKey as ScientificDomain;
-                    initialSimId = sim.id;
-                    break;
-                  }
-                }
-              }
+        const fetchedConfig = await fetchSimulationConfig();
+        const mapping = fetchedConfig || LOCAL_FALLBACK_CONFIG;
 
-              setActiveDomain(initialDomain);
-              setActiveSimId(initialSimId);
-              const activeSimObj = (mapping[initialDomain] as any).simulations.find((s: any) => s.id === initialSimId) || (mapping[initialDomain] as any).simulations[0];
-              setLocalParams(activeSimObj.defaultParams);
-              setIsLoadingConfig(false);
-            }
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn("[Simulation Config Loader] Failed, using local client fallbacks:", err);
-      }
+        if (!isMounted) return;
+        setDomainsConfig(mapping as Record<ScientificDomain, SimulationDomainConfig>);
 
-      // Fallback
-      if (isMounted) {
-        setDomainsConfig(LOCAL_FALLBACK_CONFIG);
         let initialDomain = 'physics' as ScientificDomain;
-        let initialSimId = 'relativity';
-        for (const [domKey, domConfig] of Object.entries(LOCAL_FALLBACK_CONFIG)) {
+        let initialSimId = '';
+
+        outerLoop1: for (const [domKey, domConfig] of Object.entries(mapping) as Array<[ScientificDomain, SimulationDomainConfig]>) {
+          if (slug === domKey) {
+            initialDomain = domKey;
+            initialSimId = domConfig.simulations[0]?.id || '';
+            break outerLoop1;
+          }
           for (const sim of domConfig.simulations) {
-            if (slug === sim.id || slug === domKey) {
-              initialDomain = domKey as ScientificDomain;
+            if (slug === sim.id) {
+              initialDomain = domKey;
               initialSimId = sim.id;
-              break;
+              break outerLoop1;
             }
           }
         }
+
+        if (!initialSimId && mapping[initialDomain]) {
+          initialSimId = mapping[initialDomain].simulations[0]?.id || 'relativity';
+        }
+
+        const activeSimObj = mapping[initialDomain]?.simulations.find((s) => s.id === initialSimId) || mapping[initialDomain]?.simulations[0];
         setActiveDomain(initialDomain);
         setActiveSimId(initialSimId);
-        const activeSimObj = LOCAL_FALLBACK_CONFIG[initialDomain].simulations.find(s => s.id === initialSimId) || LOCAL_FALLBACK_CONFIG[initialDomain].simulations[0];
-        setLocalParams(activeSimObj.defaultParams);
-        setIsLoadingConfig(false);
+        if (activeSimObj) setLocalParams(activeSimObj.defaultParams ?? {});
+      } catch (err) {
+        console.warn("[Simulation Config Loader] Failed, using local client fallbacks:", err);
+        if (!isMounted) return;
+        setDomainsConfig(LOCAL_FALLBACK_CONFIG);
+
+        let initialDomain = 'physics' as ScientificDomain;
+        let initialSimId = '';
+
+        outerLoop2: for (const [domKey, domConfig] of Object.entries(LOCAL_FALLBACK_CONFIG) as Array<[ScientificDomain, SimulationDomainConfig]>) {
+          if (slug === domKey) {
+            initialDomain = domKey;
+            initialSimId = domConfig.simulations[0]?.id || '';
+            break outerLoop2;
+          }
+          for (const sim of domConfig.simulations) {
+            if (slug === sim.id) {
+              initialDomain = domKey;
+              initialSimId = sim.id;
+              break outerLoop2;
+            }
+          }
+        }
+
+        if (!initialSimId && LOCAL_FALLBACK_CONFIG[initialDomain]) {
+          initialSimId = LOCAL_FALLBACK_CONFIG[initialDomain].simulations[0]?.id || 'relativity';
+        }
+
+        const activeSimObj = LOCAL_FALLBACK_CONFIG[initialDomain].simulations.find((s) => s.id === initialSimId) || LOCAL_FALLBACK_CONFIG[initialDomain].simulations[0];
+        setActiveDomain(initialDomain);
+        setActiveSimId(initialSimId);
+        if (activeSimObj) setLocalParams(activeSimObj.defaultParams ?? {});
+      } finally {
+        if (isMounted) setIsLoadingConfig(false);
       }
     };
 
-    fetchConfig();
+    resolveInitialConfig();
     return () => { isMounted = false; };
   }, [slug]);
 
-  // Compute active variables safely
-  const activeDomainConfig = domainsConfig ? domainsConfig[activeDomain] : null;
-  const activeSim = activeDomainConfig ? (activeDomainConfig.simulations.find((s: any) => s.id === activeSimId) || activeDomainConfig.simulations[0]) : null;
-
-  const resetActivityTimer = () => {
+  const resetActivityTimer = useCallback(() => {
     setUiActive(true);
     if (activityTimerRef.current) {
       clearTimeout(activityTimerRef.current);
@@ -1554,28 +781,44 @@ export function SimulationRunner({ slug }: { slug: string }) {
         setUiActive(false);
       }, 3500);
     }
-  };
-
-  useEffect(() => {
-    resetActivityTimer();
   }, [aiOpen, sidebarOpen, showHistory]);
 
   useEffect(() => {
-    resetActivityTimer();
+    const timer = window.setTimeout(() => {
+      resetActivityTimer();
+    }, 0);
+
     return () => {
+      window.clearTimeout(timer);
       if (activityTimerRef.current) clearTimeout(activityTimerRef.current);
     };
-  }, []);
+  }, [resetActivityTimer]);
 
   // Instantiates decoupled core engine when Sim toggles
   useEffect(() => {
-    if (!activeSim) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    let syncTimer: number | null = null;
 
     if (engineRef.current) {
       engineRef.current.destroy();
+      engineRef.current = null;
     }
+
+    if (!activeSim) return;
+
+    // Conceptual labs have no Canvas engine — the SVG HUD handles rendering.
+    if (isConceptual) {
+      syncTimer = window.setTimeout(() => {
+        setLocalParams(activeSim.defaultParams);
+        setAiStreamText("");
+        setAiResult(null);
+      }, 0);
+      return () => {
+        if (syncTimer !== null) window.clearTimeout(syncTimer);
+      };
+    }
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
     const engine = new SimulationEngine(
       canvas,
@@ -1591,15 +834,20 @@ export function SimulationRunner({ slug }: { slug: string }) {
     engine.isRunning = isRunning;
     engine.start();
 
-    setLocalParams(activeSim.defaultParams);
-    setAiStreamText("");
-    setAiResult(null);
-    fetchHistory(activeSimId);
+    syncTimer = window.setTimeout(() => {
+      setLocalParams(activeSim.defaultParams);
+      setAiStreamText("");
+      setAiResult(null);
+    }, 0);
 
     return () => {
       engine.destroy();
+      if (syncTimer !== null) window.clearTimeout(syncTimer);
     };
-  }, [activeSimId, activeDomain, isLoadingConfig]);
+  // NOTE: isRunning intentionally excluded — a separate effect (below) syncs it.
+  // Including it here would destroy + re-create the engine on every pause/play.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSimId, activeDomain, activeSim, isLoadingConfig, isConceptual]);
 
   useEffect(() => {
     if (engineRef.current) {
@@ -1607,26 +855,40 @@ export function SimulationRunner({ slug }: { slug: string }) {
     }
   }, [isRunning]);
 
-  const fetchHistory = async (simId: string) => {
-    try {
-      const response = await fetch(`/api/simulations/history?simulationId=${simId}&limit=5`);
-      if (response.ok) {
+  useEffect(() => {
+    if (!showHistory || !activeSimId) return;
+    if (historyCacheRef.current[activeSimId]) {
+      setHistoryRuns(historyCacheRef.current[activeSimId]);
+      return;
+    }
+
+    let active = true;
+    const loadHistory = async () => {
+      try {
+        const response = await fetch(`/api/simulations/history?simulationId=${activeSimId}&limit=5`, {
+          credentials: "include",
+        });
+        if (!active || !response.ok) return;
         const body = await response.json();
         if (body.success && body.data) {
+          historyCacheRef.current[activeSimId] = body.data;
           setHistoryRuns(body.data);
         }
+      } catch (e) {
+        console.warn("Failed fetching history runs:", e);
       }
-    } catch (e) {
-      console.warn("Failed fetching history runs:", e);
-    }
-  };
+    };
 
-  const handleSliderChange = (key: string, val: number) => {
-    setLocalParams(prev => ({ ...prev, [key]: val }));
-    if (engineRef.current) {
-      engineRef.current.updateParameter(key, val);
-    }
-  };
+    loadHistory();
+    return () => {
+      active = false;
+    };
+  }, [showHistory, activeSimId]);
+
+  const handleSliderChange = useCallback((key: string, val: number) => {
+    setLocalParams((prev) => ({ ...prev, [key]: val }));
+    scheduleEngineParameterUpdate(key, val);
+  }, [scheduleEngineParameterUpdate]);
 
   const handleSparkAIInterpretation = async () => {
     if (isAiLoading || !activeSim) return;
@@ -1684,8 +946,6 @@ export function SimulationRunner({ slug }: { slug: string }) {
           }
         }
       }
-
-      fetchHistory(activeSimId);
     } catch {
       setAiStreamText("Initializing local scientifically compiled fallback assessment...");
       setTimeout(() => {
@@ -1703,11 +963,11 @@ export function SimulationRunner({ slug }: { slug: string }) {
     }
   };
 
-  const loadHistoryItem = (item: any) => {
+  const loadHistoryItem = (item: HistoryRun) => {
     setLocalParams(item.parameters);
     if (engineRef.current) {
-      Object.entries(item.parameters).forEach(([k, v]: any) => {
-        engineRef.current?.updateParameter(k, v);
+      Object.entries(item.parameters).forEach(([k, v]) => {
+        engineRef.current?.updateParameter(k, v as number);
       });
     }
     setAiResult(item.aiInterpretation);
@@ -1738,17 +998,23 @@ export function SimulationRunner({ slug }: { slug: string }) {
       {/* ======================================================================
           1. SIMULATION CANVAS LAYER (PRIMARY FOCUS - 100% CONTAINER PORT)
           ====================================================================== */}
-      <div className="absolute inset-0 w-full h-full z-0 rounded-2xl overflow-hidden">
-        <canvas 
-          ref={canvasRef} 
-          width={760} 
-          height={480} 
-          className="w-full h-full object-cover block"
+      {isConceptual ? (
+        <ConceptualTelemetryHUD
+          accent={activeDomainConfig?.accentHex || "#3b82f6"}
+          sim={activeSim}
+          params={localParams}
         />
-        
-        {/* Soft edge grid overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#030305]/60 via-transparent to-[#030305]/10 pointer-events-none" />
-      </div>
+      ) : (
+        <div className="absolute inset-0 w-full h-full z-0 rounded-2xl overflow-hidden">
+          <canvas
+            ref={canvasRef}
+            className="w-full h-full object-cover block"
+          />
+
+          {/* Soft edge grid overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#030305]/60 via-transparent to-[#030305]/10 pointer-events-none" />
+        </div>
+      )}
 
       {/* Floating Single-Line HUD Readout Overlay (Hides on inactivity) */}
       <div className={`absolute top-6 left-6 z-10 font-mono text-[10px] tracking-wider text-muted-foreground/60 flex items-center gap-3 transition-all duration-500 ease-out select-none pointer-events-none ${
@@ -1771,6 +1037,7 @@ export function SimulationRunner({ slug }: { slug: string }) {
       }`}>
         <button
           onClick={() => setSidebarOpen(!sidebarOpen)}
+          aria-label={sidebarOpen ? "Close laboratories panel" : "Open laboratories panel"}
           className="p-2 rounded-lg bg-black/45 border border-white/5 hover:border-white/15 text-muted-foreground hover:text-white transition-all backdrop-blur-md flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold"
         >
           <Settings size={12} /> Labs
@@ -1778,6 +1045,7 @@ export function SimulationRunner({ slug }: { slug: string }) {
 
         <button
           onClick={() => setIsRunning(!isRunning)}
+          aria-label={isRunning ? "Pause simulation" : "Resume simulation"}
           className="p-2 rounded-lg bg-black/45 border border-white/5 hover:border-white/15 text-muted-foreground hover:text-white transition-all backdrop-blur-md"
         >
           {isRunning ? <Pause size={12} /> : <Play size={12} />}
@@ -1785,6 +1053,7 @@ export function SimulationRunner({ slug }: { slug: string }) {
 
         <button
           onClick={() => { engineRef.current?.resetTime(); }}
+          aria-label="Reset simulation"
           className="p-2 rounded-lg bg-black/45 border border-white/5 hover:border-white/15 text-muted-foreground hover:text-white transition-all backdrop-blur-md"
         >
           <RefreshCw size={12} />
@@ -1792,6 +1061,7 @@ export function SimulationRunner({ slug }: { slug: string }) {
 
         <button
           onClick={() => setAiOpen(!aiOpen)}
+          aria-label={aiOpen ? "Close Spark AI panel" : "Open Spark AI analysis"}
           className={`p-2 rounded-lg border transition-all backdrop-blur-md flex items-center gap-1 text-[10px] uppercase tracking-wider font-bold ${
             aiOpen 
               ? 'bg-secondary text-secondary-foreground border-secondary/40 shadow-[0_0_15px_rgba(167,139,250,0.25)]' 
@@ -1811,7 +1081,7 @@ export function SimulationRunner({ slug }: { slug: string }) {
           : "opacity-0 scale-[0.98] translate-y-4 pointer-events-none"
       }`}>
         <div className="bg-black/20 border border-white/5 rounded-2xl shadow-2xl backdrop-blur-sm overflow-hidden p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {activeSim.paramsList.map((p: any) => {
+          {activeSim.paramsList.map((p: SubSimulation["paramsList"][number]) => {
             const val = localParams[p.key] ?? p.min;
             return (
               <div key={p.key} className="space-y-1">
@@ -1955,8 +1225,8 @@ export function SimulationRunner({ slug }: { slug: string }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-none">
-          {Object.entries(domainsConfig).map(([domKey, domConfig]: [string, any]) => {
-            const Icon = domConfig.icon;
+          {(Object.entries(domainsConfig) as Array<[ScientificDomain, SimulationDomainConfig]>).map(([domKey, domConfig]) => {
+            const Icon = domConfig.icon || DOMAIN_ICONS[domKey];
             const isActive = activeDomain === domKey;
             
             return (
@@ -1981,7 +1251,7 @@ export function SimulationRunner({ slug }: { slug: string }) {
 
                 {isActive && (
                   <div className="pl-4 space-y-1 mt-0.5 border-l border-white/5 ml-3.5">
-                    {domConfig.simulations.map((sim: any) => {
+                    {domConfig.simulations.map((sim: SubSimulation) => {
                       const isSimActive = activeSimId === sim.id;
                       return (
                         <button
@@ -2052,7 +1322,7 @@ export function SimulationRunner({ slug }: { slug: string }) {
                     <div>
                       <p className="font-bold text-foreground">{new Date(run.timestamp).toLocaleString()}</p>
                       <p className="text-[9px] text-muted-foreground mt-0.5">
-                        Params: {Object.entries(run.parameters).map(([k, v]: any) => `${k}: ${v.toFixed(1)}`).join(', ')}
+                        Params: {Object.entries(run.parameters).map(([k, v]) => `${k}: ${(v as number).toFixed(1)}`).join(', ')}
                       </p>
                     </div>
                     <ChevronRight size={12} className="text-muted-foreground" />

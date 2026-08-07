@@ -25,7 +25,7 @@ import type { AppNotification } from "@/app/api/notifications/route";
 // ─── CSRF helpers (mirrored from side-nav) ───────────────────
 
 async function fetchCsrfToken() {
-  const res = await fetch("/api/auth/csrf");
+  const res = await fetch("/api/auth/csrf", { credentials: 'include' });
   if (!res.ok) throw new Error("Unable to obtain CSRF token");
   const payload = await res.json();
   return payload?.data?.csrfToken as string | undefined;
