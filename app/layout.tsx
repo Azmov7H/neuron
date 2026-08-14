@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
+import { Analytics } from "@vercel/analytics/next"
 import { CsrfFetchProvider } from '@/components/security/csrf-fetch-provider';
 
 const inter = Inter({
@@ -91,6 +92,7 @@ export default function RootLayout({
     <html lang="en" className={`h-full antialiased dark ${inter.variable}`}>
       <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
       <body className="min-h-full flex flex-col">
+      <Analytics/>
         <CsrfFetchProvider />
         {children}
       </body>
