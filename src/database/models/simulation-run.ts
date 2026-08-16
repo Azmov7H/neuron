@@ -9,20 +9,22 @@ export interface ISimulationRun {
   simulationId: string;
   userId: mongoose.Types.ObjectId;
   domain: string;
-  parameters: Record<string, any>;
-  stateSnapshot: Record<string, any>;
-  aiInterpretation: {
-    explanation: string;
-    keyInsights: string[];
-    concepts: string[];
-    recommendedActions: string[];
-    metadata: {
-      domain: string;
-      simulationType: string;
-      difficulty: 'beginner' | 'intermediate' | 'advanced';
-      aiModel: string;
+  parameters: Record<string, number>;
+  stateSnapshot: Record<string, unknown>;
+aiInterpretation: {
+      explanation: string;
+      keyInsights: string[];
+      concepts: string[];
+      recommendedActions: string[];
+      metadata: {
+        domain: string;
+        simulationType: string;
+        difficulty: 'beginner' | 'intermediate' | 'advanced';
+        aiModel: string;
+        source: 'ai' | 'deterministic';
+        fallbackReason?: 'missing_api_key' | 'timeout' | 'provider_error';
+      };
     };
-  };
   timestamp: Date;
 }
 
@@ -86,7 +88,18 @@ const simulationRunSchema = new Schema<ISimulationRunDocument>(
           required: true,
           default: 'intermediate',
         },
-        aiModel: { type: String, required: true, default: 'gemma-4-26b-a4b-it' },
+        aiModel: { type: String, required: true, default: '' },
+        source: {
+          type: String,
+          enum: ['ai', 'deterministic'],
+          required: true,
+          default: 'ai',
+        },
+        fallbackReason: {
+          type: String,
+          enum: ['missing_api_key', 'timeout', 'provider_error'],
+          required: false,
+        },
       },
     },
     timestamp: {

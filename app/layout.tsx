@@ -89,7 +89,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`h-full antialiased dark ${inter.variable}`}>
+    <html lang="en" dir="ltr" className={`h-full antialiased dark ${inter.variable}`}>
       <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
       <body className="min-h-full flex flex-col">
       <Analytics/>

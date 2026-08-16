@@ -1,15 +1,14 @@
 /**
  * Simulation API Security Utilities
- * Centralized CSRF protection and validation utilities for simulation endpoints
+ * Centralized CSRF protection for simulation mutation endpoints
  */
 
-import { requireCsrfProtection } from './csrf';
-import { validateSimulationRun, SimulationRunCreateSchema } from './validation';
+import { requireCsrfProtection, RouteHandler } from './csrf';
 
 /**
  * Apply CSRF protection to simulation mutation endpoints
  * Centralizes CSRF logic to avoid duplication across simulation APIs
  */
-export function requireSimulationCsrfProtection(handler: any): any {
+export function requireSimulationCsrfProtection(handler: RouteHandler): RouteHandler {
   return requireCsrfProtection(handler);
 }

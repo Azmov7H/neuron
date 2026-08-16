@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Atom, Clock, FlaskConical } from "lucide-react";
-import { DOMAIN_STYLES } from "./constants";
+import { DOMAIN_STYLES, DOMAIN_ORDER } from "./constants";
 import { fetchSimulationConfig } from "./simulation-config-client";
+import type { ScientificDomain } from "@/lib/simulation/registry.types";
 
 interface SimMeta {
   name: string;
-  domain: string;
+  domain: ScientificDomain;
 }
 
 interface HistoryRun {
@@ -48,11 +49,12 @@ export function ContinueExperimenting() {
 
         if (config) {
           const map: Record<string, SimMeta> = {};
-          Object.entries(config).forEach(([domainKey, domainConfig]) => {
+          for (const domainKey of DOMAIN_ORDER) {
+            const domainConfig = config[domainKey];
             domainConfig.simulations.forEach((sim) => {
               map[sim.id] = { name: sim.name, domain: domainKey };
             });
-          });
+          }
           setNameMap(map);
         }
 

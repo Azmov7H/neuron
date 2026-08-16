@@ -1,52 +1,54 @@
 // components/simulation-runner/simulation-runner.tsx
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useCallback } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, memo } from "react";
 import type { LucideIcon } from "lucide-react";
 import { 
-  Atom, Brain, Heart, Landmark, Orbit, Compass, 
   Sparkles, Play, Pause, RefreshCw, 
-  Send, Database, History, X, Settings, ChevronRight
+  Send, History, X, Settings, ChevronRight, Orbit, Brain
 } from "lucide-react";
 import { isInteractiveSim } from "@/components/simulations/constants";
+import { DOMAIN_STYLES } from "@/components/simulations/domain-presentation";
 import { ConceptualTelemetryHUD } from "@/components/simulation-runner/conceptual-telemetry-hud";
 import { fetchSimulationConfig } from "@/components/simulations/simulation-config-client";
+import {
+  DOMAIN_ORDER,
+} from "@/lib/simulation/registry";
+import { buildSimulationConfigPayload } from "@/lib/simulation/config-payload";
+import type { SimulationDomainConfig } from "@/lib/simulation/config-payload";
+import type { ClientSimulation, ScientificDomain, SimulationParameter } from "@/lib/simulation/registry.types";
 
 // Import centralized types and constants
 import type {
-  ScientificDomain,
   TelemetrySnapshot,
 } from "@/components/simulation-runner/simulation.types";
 import { SimulationEngine } from "@/components/simulation-runner/simulation-engine";
+import { getSimulationStateType } from "@/components/simulation-runner/simulation-state";
+import { NaturalLanguageInput } from "@/components/simulation-runner/natural-language-input";
+import type { NlReadyResult } from "@/lib/simulation/nl-interpreter.service";
+import { clampSimulationParameters } from "@/lib/simulation/schemas";
+import { presentEquation } from "@/lib/simulation/equation-presentation";
+import { FALLBACK_REASON_LABELS } from "@/lib/simulation/assessment";
 
-// ============================================================================
-// TYPES & SYSTEM CONFIGURATION
-// ============================================================================
-// ScientificDomain is imported from simulation.types above
-
-interface SubSimulation {
-  id: string;
-  name: string;
-  desc: string;
-  equation: string;
-  defaultParams: Record<string, number>;
-  paramsList: Array<{
-    key: string;
-    label: string;
-    min: number;
-    max: number;
-    step: number;
-  }>;
+// Runner-side domain config = the canonical API payload + the UI icon
+// attached from the single presentation boundary.
+export interface RunnerDomainConfig extends SimulationDomainConfig {
+  icon: LucideIcon;
 }
 
-interface SimulationDomainConfig {
-  name: string;
-  icon?: LucideIcon;
-  colorClass: string;
-  glowClass: string;
-  accentHex: string;
-  simulations: SubSimulation[];
+// Build the local fallback config from the registry (same shared builder as
+// the config API) and attach presentation icons.
+function buildLocalFallbackConfig(): Record<ScientificDomain, RunnerDomainConfig> {
+  return buildSimulationConfigPayload().reduce((acc, domain) => {
+    acc[domain.domainKey] = {
+      ...domain,
+      icon: DOMAIN_STYLES[domain.domainKey].icon,
+    };
+    return acc;
+  }, {} as Record<ScientificDomain, RunnerDomainConfig>);
 }
+
+const LOCAL_FALLBACK_CONFIG = buildLocalFallbackConfig();
 
 
 interface HistoryRun {
@@ -58,560 +60,83 @@ interface HistoryRun {
     keyInsights: string[];
     concepts: string[];
     recommendedActions: string[];
+    metadata?: {
+      domain: string;
+      simulationType: string;
+      difficulty: 'beginner' | 'intermediate' | 'advanced';
+      aiModel: string;
+      source: 'ai' | 'deterministic';
+      fallbackReason?: 'missing_api_key' | 'timeout' | 'provider_error';
+    };
   };
 }
 
-// Client Fallback Config in case the API is offline
-const LOCAL_FALLBACK_CONFIG: Record<ScientificDomain, SimulationDomainConfig> = {
-  physics: {
-    name: "Physics Labs",
-    icon: Atom,
-    colorClass: "text-blue-400 border-blue-500/20 bg-blue-500/5",
-    glowClass: "shadow-[0_0_20px_rgba(96,165,250,0.15)]",
-    accentHex: "#3b82f6",
-    simulations: [
-      {
-        id: "relativity",
-        name: "Special Relativity Dilation",
-        desc: "Observe spatial contraction and moving clock dilation as velocity approaches light speed.",
-        equation: "t' = \\frac{t}{\\sqrt{1 - v^2/c^2}}",
-        defaultParams: { speed: 0.5 },
-        paramsList: [{ key: "speed", label: "Velocity (v/c)", min: 0.0, max: 0.99, step: 0.01 }]
-      },
-      {
-        id: "motion",
-        name: "Newtonian Motion Sandbox",
-        desc: "Examine inertia, applied forces, and friction acting dynamically on a moving particle.",
-        equation: "a = \\frac{F_{thrust} - \\mu m g}{m}",
-        defaultParams: { force: 15, mass: 5, friction: 0.2 },
-        paramsList: [
-          { key: "force", label: "Thrust Force (N)", min: 0, max: 50, step: 1 },
-          { key: "mass", label: "Inertial Mass (kg)", min: 1, max: 20, step: 0.5 },
-          { key: "friction", label: "Friction Coefficient (\u03bbf)", min: 0, max: 0.8, step: 0.05 }
-        ]
-      },
-      {
-        id: "gravity",
-        name: "Satellite Gravity System",
-        desc: "Model centripetal orbital vectors balancing deep gravitational acceleration.",
-        equation: "v_{orbit} = \\sqrt{\\frac{G \\cdot M}{r}}",
-        defaultParams: { orbitalRadius: 8, centralMass: 150 },
-        paramsList: [
-          { key: "orbitalRadius", label: "Orbit Radius (r)", min: 3, max: 14, step: 0.5 },
-          { key: "centralMass", label: "Stellar Mass (M)", min: 50, max: 300, step: 10 }
-        ]
-      },
-      {
-        id: "pendulum",
-        name: "Simple Harmonic Pendulum",
-        desc: "Observe the regular periodicity of gravitational acceleration balancing cable lengths.",
-        equation: "T = 2\\pi\\sqrt{\\frac{L}{g}}",
-        defaultParams: { length: 6, gravity: 9.8 },
-        paramsList: [
-          { key: "length", label: "Cable Length (L meters)", min: 2, max: 12, step: 0.5 },
-          { key: "gravity", label: "Gravitational (g m/s\u00b2)", min: 1.6, max: 25.0, step: 0.2 }
-        ]
-      },
-      {
-        id: "thermodynamics",
-        name: "Ideal Gas Pressure Sandbox",
-        desc: "Model thermodynamic kinetic energy collisions within a bounded volume chamber.",
-        equation: "P = \\frac{n \\cdot R \\cdot T}{V}",
-        defaultParams: { temperature: 300, volume: 5 },
-        paramsList: [
-          { key: "temperature", label: "Temperature (T Kelvin)", min: 100, max: 600, step: 10 },
-          { key: "volume", label: "Chamber Volume (V Liters)", min: 2, max: 15, step: 0.5 }
-        ]
-      },
-      {
-        id: "optics",
-        name: "Snell Refraction Wave",
-        desc: "Graph the velocity bending paths of light waves transitioning boundary indices.",
-        equation: "n_1 \\sin(\\theta_1) = n_2 \\sin(\\theta_2)",
-        defaultParams: { index1: 1.0, index2: 1.5, angle1: 45 },
-        paramsList: [
-          { key: "index1", label: "Medium 1 Refraction (n\u2081)", min: 1.0, max: 2.5, step: 0.1 },
-          { key: "index2", label: "Medium 2 Refraction (n\u2082)", min: 1.0, max: 2.5, step: 0.1 },
-          { key: "angle1", label: "Incident Angle (\u03b8\u2081\u00b0)", min: 0, max: 85, step: 1 }
-        ]
-      },
-      {
-        id: "wave_interference",
-        name: "Double Slit Interference",
-        desc: "Observe crests and troughs overlapping to form phase shifts and bright fringes.",
-        equation: "y = \\frac{L \\cdot \\lambda}{d}",
-        defaultParams: { wavelength: 550, slitDistance: 12 },
-        paramsList: [
-          { key: "wavelength", label: "Light Color (\u03bb nm)", min: 380, max: 750, step: 10 },
-          { key: "slitDistance", label: "Slit Separation (d \u03bcm)", min: 4, max: 24, step: 0.5 }
-        ]
-      },
-      {
-        id: "electrostatics",
-        name: "Coulomb Particle Force",
-        desc: "Model deep attraction and repulsion vectors acting between static charges.",
-        equation: "F = k_e \\cdot \\frac{q_1 \\cdot q_2}{r^2}",
-        defaultParams: { charge1: 10, charge2: -10, distance: 5 },
-        paramsList: [
-          { key: "charge1", label: "Charge 1 (q\u2081 \u03bcC)", min: -30, max: 30, step: 1 },
-          { key: "charge2", label: "Charge 2 (q\u2082 \u03bcC)", min: -30, max: 30, step: 1 },
-          { key: "distance", label: "Separation Radius (r cm)", min: 2, max: 12, step: 0.2 }
-        ]
-      }
-    ]
-  },
-  biology: {
-    name: "Biology Labs",
-    icon: Compass,
-    colorClass: "text-emerald-400 border-emerald-500/20 bg-emerald-500/5",
-    glowClass: "shadow-[0_0_20px_rgba(52,211,153,0.15)]",
-    accentHex: "#10b981",
-    simulations: [
-      {
-        id: "bacteria",
-        name: "Bacterial Logistic Colony",
-        desc: "Simulate logarithmic cell division, growth phases, and carrying capacity saturation.",
-        equation: "\\frac{dN}{dt} = r \\cdot N \\left(1 - \\frac{N}{K}\\right)",
-        defaultParams: { temperature: 37, nutrientLevel: 6 },
-        paramsList: [
-          { key: "temperature", label: "Growth Temp (\u00b0C)", min: 5, max: 50, step: 1 },
-          { key: "nutrientLevel", label: "Nutrients index (K)", min: 1, max: 10, step: 0.5 }
-        ]
-      },
-      {
-        id: "virus",
-        name: "Pathogen SIR Spread",
-        desc: "Model dynamic virus transmission through compartment interactions (Susceptible-Infected-Recovered).",
-        equation: "R_0 = \\frac{\\beta}{\\gamma}",
-        defaultParams: { transmissionRate: 0.5, recoveryRate: 0.1, populationSize: 120 },
-        paramsList: [
-          { key: "transmissionRate", label: "Transmission Rate (\u03b2)", min: 0.1, max: 0.9, step: 0.05 },
-          { key: "recoveryRate", label: "Recovery Frequency (\u03b3)", min: 0.02, max: 0.3, step: 0.01 },
-          { key: "populationSize", label: "Population Size (N)", min: 30, max: 300, step: 10 }
-        ]
-      },
-      {
-        id: "immune",
-        name: "Cellular Immune Sweep",
-        desc: "Observe white blood phagocytes recruit via chemotaxis to engulf foreign pathogens.",
-        equation: "\\frac{dP}{dt} = r_p P - k P \\cdot WBC",
-        defaultParams: { pathogenCount: 40, wbcCount: 15 },
-        paramsList: [
-          { key: "pathogenCount", label: "Pathogens (Red)", min: 10, max: 100, step: 5 },
-          { key: "wbcCount", label: "Leukocytes (Green)", min: 2, max: 35, step: 1 }
-        ]
-      },
-      {
-        id: "genetics",
-        name: "Mendel Punnett Alleles",
-        desc: "Observe gene distribution frequencies and Hardy-Weinberg equilibrium offsets.",
-        equation: "p^2 + 2pq + q^2 = 1.0",
-        defaultParams: { dominantRatio: 0.6 },
-        paramsList: [{ key: "dominantRatio", label: "Dominant Allele Frequency (p)", min: 0.05, max: 0.95, step: 0.05 }]
-      },
-      {
-        id: "photosynthesis",
-        name: "Chlorophyll Photon Absorption",
-        desc: "Observe the energetic rate of photon capture and carbon conversion processes.",
-        equation: "Rate \\propto Light \\cdot CO_2",
-        defaultParams: { lightIntensity: 8, co2Level: 4 },
-        paramsList: [
-          { key: "lightIntensity", label: "Light Flux (lux)", min: 1, max: 12, step: 0.5 },
-          { key: "co2Level", label: "Carbon Concent (PPM)", min: 1, max: 8, step: 0.5 }
-        ]
-      },
-      {
-        id: "enzymes",
-        name: "Lock & Key Reaction Kinetic",
-        desc: "Observe metabolic reaction speeds saturating enzyme active sites.",
-        equation: "v = \\frac{V_{max} \\cdot [S]}{K_m + [S]}",
-        defaultParams: { substrateConc: 5, enzymeConc: 3 },
-        paramsList: [
-          { key: "substrateConc", label: "Substrate Count [S]", min: 1, max: 12, step: 0.5 },
-          { key: "enzymeConc", label: "Enzyme Concentration", min: 1, max: 8, step: 0.5 }
-        ]
-      },
-      {
-        id: "osmosis",
-        name: "Semi-permeable Membrane Fluid",
-        desc: "Examine water molecules moving across membrane barriers to balance solute pressures.",
-        equation: "\\Pi = i \\cdot M \\cdot R \\cdot T",
-        defaultParams: { soluteRatio: 4 },
-        paramsList: [{ key: "soluteRatio", label: "Intracellular Salt (%)", min: 1, max: 8, step: 0.2 }]
-      },
-      {
-        id: "ecosystem",
-        name: "Predator-Prey Lotka-Volterra",
-        desc: "Model dynamic oscillations as populations balance hunting frequencies.",
-        equation: "\\frac{dx}{dt} = \\alpha x - \\beta x y",
-        defaultParams: { preyPopulation: 60, predatorPopulation: 15 },
-        paramsList: [
-          { key: "preyPopulation", label: "Primary Herbivores (x)", min: 20, max: 100, step: 5 },
-          { key: "predatorPopulation", label: "Apex Predators (y)", min: 5, max: 35, step: 1 }
-        ]
-      }
-    ]
-  },
-  anatomy: {
-    name: "Anatomy Labs",
-    icon: Heart,
-    colorClass: "text-rose-400 border-rose-500/20 bg-rose-500/5",
-    glowClass: "shadow-[0_0_20px_rgba(251,113,133,0.15)]",
-    accentHex: "#f43f5e",
-    simulations: [
-      {
-        id: "heart",
-        name: "Cardiovascular Output",
-        desc: "Measure mechanical blood flow pumped per minute through systemic ventricles.",
-        equation: "CO = HR \\cdot SV",
-        defaultParams: { heartRate: 72, strokeVolume: 70 },
-        paramsList: [
-          { key: "heartRate", label: "Heart Rate (BPM)", min: 40, max: 180, step: 5 },
-          { key: "strokeVolume", label: "Stroke Volume (mL)", min: 40, max: 125, step: 5 }
-        ]
-      },
-      {
-        id: "neural",
-        name: "Axonal Signaling Pulse",
-        desc: "Fire electrical depolarization spikes along myelinated nerve fibers.",
-        equation: "v_{conduction} \\propto myelin",
-        defaultParams: { stimulusStrength: 5, myelination: 2 },
-        paramsList: [
-          { key: "stimulusStrength", label: "Stimulus (mV)", min: 1, max: 10, step: 0.5 },
-          { key: "myelination", label: "Myelin Sheath factor", min: 1, max: 4, step: 0.5 }
-        ]
-      },
-      {
-        id: "blood",
-        name: "Vascular Poiseuille Flow",
-        desc: "Observe how minor vasoconstrictions logarithmically drop flow rates.",
-        equation: "Q = \\frac{\\Delta P \\cdot \\pi \\cdot r^4}{8 \\eta L}",
-        defaultParams: { vesselRadius: 3, bloodPressure: 100 },
-        paramsList: [
-          { key: "vesselRadius", label: "Lumen Radius (r)", min: 1, max: 5, step: 0.1 },
-          { key: "bloodPressure", label: "Perfusion Pressure (\u0394P)", min: 50, max: 150, step: 5 }
-        ]
-      },
-      {
-        id: "nephron",
-        name: "Glomerular Renal Filtration",
-        desc: "Observe dynamic capillary blood filtering across Bowman capsule glomeruli.",
-        equation: "GFR = K_f \\cdot (P_g - P_b - \\pi_g)",
-        defaultParams: { filterPressure: 45, urineResistance: 12 },
-        paramsList: [
-          { key: "filterPressure", label: "Glomerular Pressure (P\u1d62)", min: 30, max: 70, step: 1 },
-          { key: "urineResistance", label: "Bowman Resistance (P\u1d47)", min: 5, max: 25, step: 0.5 }
-        ]
-      },
-      {
-        id: "pulmonary",
-        name: "Alveolar Gas Exchange",
-        desc: "Examine oxygen diffusion across thin wet respiratory cell borders.",
-        equation: "V_{gas} \\propto \\frac{A \\cdot D \\cdot \\Delta P}{T}",
-        defaultParams: { oxygenPartialPress: 104, barrierThickness: 2 },
-        paramsList: [
-          { key: "oxygenPartialPress", label: "Alveolar O\u2082 Pressure (\u0394P)", min: 60, max: 130, step: 2 },
-          { key: "barrierThickness", label: "Membrane Width (T \u03bcm)", min: 1, max: 5, step: 0.2 }
-        ]
-      },
-      {
-        id: "muscle",
-        name: "Actomyosin Cross-Bridge Slide",
-        desc: "Examine sliding sarcomere fibers contracting on calcium ion updates.",
-        equation: "F = F_0 \\left(1 - \\frac{v}{v_{max}}\\right)",
-        defaultParams: { calciumLevel: 5, atpAvailability: 8 },
-        paramsList: [
-          { key: "calciumLevel", label: "Intracellular Ca\u00b2\u207a ions", min: 1, max: 10, step: 0.5 },
-          { key: "atpAvailability", label: "ATP Energy concentration", min: 2, max: 12, step: 0.5 }
-        ]
-      },
-      {
-        id: "endocrine",
-        name: "Insulin Glucose Hormonal Loop",
-        desc: "Observe systemic loops adjusting blood sugar via beta-cell insulin updates.",
-        equation: "\\frac{dG}{dt} = I_{prod} - I_{util} \\cdot G",
-        defaultParams: { carbIntake: 60, insulinSensitivity: 4 },
-        paramsList: [
-          { key: "carbIntake", label: "Carb Load (g)", min: 10, max: 120, step: 5 },
-          { key: "insulinSensitivity", label: "Insulin Affinity", min: 1, max: 8, step: 0.2 }
-        ]
-      },
-      {
-        id: "bone",
-        name: "Osteoblast Calcium Deposit",
-        desc: "Model dynamic bone remodeling mineral deposition ratios.",
-        equation: "Bone_{mass} \\propto D_3 \\cdot Cal",
-        defaultParams: { calciumIntake: 8, vitaminD: 5 },
-        paramsList: [
-          { key: "calciumIntake", label: "Dietary Calcium (mg)", min: 2, max: 15, step: 0.5 },
-          { key: "vitaminD", label: "Vitamin D\u2083 index", min: 1, max: 10, step: 0.5 }
-        ]
-      }
-    ]
-  },
-  mathematics: {
-    name: "Math Labs",
-    icon: Landmark,
-    colorClass: "text-amber-400 border-amber-500/20 bg-amber-500/5",
-    glowClass: "shadow-[0_0_20px_rgba(251,191,36,0.15)]",
-    accentHex: "#fbbf24",
-    simulations: [
-      {
-        id: "functions",
-        name: "Combined Functions",
-        desc: "Graph trigonometric polynomial waveforms over Cartesian coordinate plane.",
-        equation: "f(x) = m \\cdot x + A \\cdot \\sin(x)",
-        defaultParams: { slope: 1.5, amplitude: 4 },
-        paramsList: [
-          { key: "slope", label: "Linear Slope (m)", min: -4, max: 4, step: 0.1 },
-          { key: "amplitude", label: "Sinusoidal Amplitude (A)", min: 0, max: 8, step: 0.2 }
-        ]
-      },
-      {
-        id: "probability",
-        name: "Galton Board Central Limit",
-        desc: "Drop thousands of random beads through triangular pegs to trace a Gaussian normal curve.",
-        equation: "P(x) = \\frac{1}{\\sigma\\sqrt{2\\pi}}e^{-\\frac{(x-\\mu)^2}{2\\sigma^2}}",
-        defaultParams: { beadsCount: 200 },
-        paramsList: [{ key: "beadsCount", label: "Beads dropped (N)", min: 50, max: 400, step: 10 }]
-      },
-      {
-        id: "graph",
-        name: "Network Graph Emergence",
-        desc: "Generate random Erd\u0151s-R\u00e9nyi node clusters to discover structural giant components.",
-        equation: "G(n, p) \\implies phase\\,transition\\,at\\,p \\approx 1/n",
-        defaultParams: { nodesCount: 30, connectionProbability: 0.15 },
-        paramsList: [
-          { key: "nodesCount", label: "Vertices (n)", min: 10, max: 50, step: 1 },
-          { key: "connectionProbability", label: "Link Probability (p)", min: 0, max: 0.5, step: 0.01 }
-        ]
-      },
-      {
-        id: "chaos",
-        name: "Lorenz Chaotic Attractor",
-        desc: "Model dynamic butterfly effects as trajectories orbit triple-dimensional attractors.",
-        equation: "\\sigma=10, \\rho=28, \\beta=8/3",
-        defaultParams: { chaosRho: 28 },
-        paramsList: [{ key: "chaosRho", label: "Rayleigh Factor (\u03c1)", min: 14, max: 40, step: 0.5 }]
-      },
-      {
-        id: "fractal",
-        name: "Mandelbrot Iteration Plane",
-        desc: "Observe dynamic complex sets rendering infinite geometric boundaries.",
-        equation: "z_{n+1} = z_n^2 + c",
-        defaultParams: { iterationsLimit: 40 },
-        paramsList: [{ key: "iterationsLimit", label: "Depth Iterations (n)", min: 10, max: 80, step: 2 }]
-      },
-      {
-        id: "fourier",
-        name: "Sine Harmonic Synthesizer",
-        desc: "Overlap discrete sine frequencies to build perfect square, triangle, or sawtooth waves.",
-        equation: "f(t) = \\sum A_n \\sin(n \\omega t)",
-        defaultParams: { harmonicCount: 3 },
-        paramsList: [{ key: "harmonicCount", label: "Harmonic Iterations (n)", min: 1, max: 12, step: 1 }]
-      },
-      {
-        id: "calculus",
-        name: "Riemann Integral Area",
-        desc: "Observe sub-divided rectangle areas summing closer to exact curve integration boundaries.",
-        equation: "\\int_a^b f(x) dx \\approx \\sum f(x_i) \\Delta x",
-        defaultParams: { rectanglesCount: 16 },
-        paramsList: [{ key: "rectanglesCount", label: "Subdivisions (n columns)", min: 4, max: 48, step: 2 }]
-      },
-      {
-        id: "fibonacci",
-        name: "Golden Spiral Growth",
-        desc: "Watch shell patterns trace the mathematical logarithmic spiral limits.",
-        equation: "\\phi = \\frac{1+\\sqrt{5}}{2} \\approx 1.618",
-        defaultParams: { spiralScale: 4 },
-        paramsList: [{ key: "spiralScale", label: "Growth Vector Scale", min: 1, max: 8, step: 0.2 }]
-      }
-    ]
-  },
-  quantum: {
-    name: "Quantum Labs",
-    icon: Brain,
-    colorClass: "text-purple-400 border-purple-500/20 bg-purple-500/5",
-    glowClass: "shadow-[0_0_20px_rgba(192,132,252,0.15)]",
-    accentHex: "#c084fc",
-    simulations: [
-      {
-        id: "wave",
-        name: "Quantized Wave Function",
-        desc: "Solve standing particle wavefunctions confined inside infinite potential well boxes.",
-        equation: "\\psi_n(x) = \\sqrt{\\frac{2}{L}} \\sin\\left(\\frac{n \\pi x}{L}\\right)",
-        defaultParams: { energyLevel: 2, wellWidth: 8 },
-        paramsList: [
-          { key: "energyLevel", label: "Energy Level (n)", min: 1, max: 6, step: 1 },
-          { key: "wellWidth", label: "Well Width (L Bohr)", min: 4, max: 12, step: 0.5 }
-        ]
-      },
-      {
-        id: "uncertainty",
-        name: "Heisenberg Conjugate spreads",
-        desc: "Squeeze the spatial spread packet to see conjugate momentum spread scatter widely.",
-        equation: "\\Delta x \\cdot \\Delta p \\ge \\frac{\\hbar}{2}",
-        defaultParams: { positionSpread: 1.5 },
-        paramsList: [{ key: "positionSpread", label: "Spatial Spread (\u0394x)", min: 0.4, max: 4.0, step: 0.1 }]
-      },
-      {
-        id: "tunneling",
-        name: "Potential Barrier Tunneling",
-        desc: "Observe finite probability waves leaking through mathematically forbidden barriers.",
-        equation: "T \\approx e^{-2\\kappa a}",
-        defaultParams: { barrierHeight: 8, particleEnergy: 4 },
-        paramsList: [
-          { key: "barrierHeight", label: "Barrier Voltage (V\u2080)", min: 5, max: 15, step: 0.5 },
-          { key: "particleEnergy", label: "Incident Energy (E)", min: 1, max: 10, step: 0.5 }
-        ]
-      },
-      {
-        id: "spin",
-        name: "Bloch Sphere Qubit Spin",
-        desc: "Rotate a unitary state qubit vectors across latitude and longitude lines.",
-        equation: "|\\psi\\rangle = \\cos\\frac{\\theta}{2}|0\\rangle + e^{i\\phi}\\sin\\frac{\\theta}{2}|1\\rangle",
-        defaultParams: { spinTheta: 90, spinPhi: 45 },
-        paramsList: [
-          { key: "spinTheta", label: "Latitude Angle (\u03b8\u00b0)", min: 0, max: 180, step: 5 },
-          { key: "spinPhi", label: "Phase Angle (\u03c6\u00b0)", min: 0, max: 360, step: 10 }
-        ]
-      },
-      {
-        id: "entanglement",
-        name: "Bell State Spooky Core",
-        desc: "Examine quantum correlation distributions between entangled particles.",
-        equation: "|\\Phi^+\\rangle = \\frac{|00\\rangle + |11\\rangle}{\\sqrt{2}}",
-        defaultParams: { correlationAngle: 45 },
-        paramsList: [{ key: "correlationAngle", label: "Measurement Angle (\u03b8\u00b0)", min: 0, max: 90, step: 5 }]
-      },
-      {
-        id: "hydrogen",
-        name: "Bohr Atomic Radius",
-        desc: "Observe stable quantized hydrogen electron orbit shells.",
-        equation: "r_n = n^2 \\cdot a_0",
-        defaultParams: { quantumNumber: 2 },
-        paramsList: [{ key: "quantumNumber", label: "Principal Shell (n)", min: 1, max: 5, step: 1 }]
-      },
-      {
-        id: "harmonic",
-        name: "Quantum Harmonic Wave",
-        desc: "Graph parabolic well energy states matching Hermite polynomial packets.",
-        equation: "E_n = (n + 1/2)\\hbar\\omega",
-        defaultParams: { oscillatorEnergy: 1 },
-        paramsList: [{ key: "oscillatorEnergy", label: "Vibrational State (n)", min: 0, max: 4, step: 1 }]
-      },
-      {
-        id: "superposition",
-        name: "Dual State Collapse",
-        desc: "Watch coherent dual states collapse instantly to definite values on measurement.",
-        equation: "|\\psi\\rangle = \\alpha|0\\rangle + \\beta|1\\rangle",
-        defaultParams: { probabilityAlpha: 50 },
-        paramsList: [{ key: "probabilityAlpha", label: "State |0\u27e9 Weight (%)", min: 0, max: 100, step: 5 }]
-      }
-    ]
-  },
-  space: {
-    name: "Space Labs",
-    icon: Orbit,
-    colorClass: "text-cyan-400 border-cyan-500/20 bg-cyan-500/5",
-    glowClass: "shadow-[0_0_20px_rgba(34,211,238,0.15)]",
-    accentHex: "#22d3ee",
-    simulations: [
-      {
-        id: "orbit",
-        name: "Planetary Kepler Orbits",
-        desc: "Trace orbital periods and speeds governed by Kepler's harmonic proportional laws.",
-        equation: "T^2 = \\frac{4\\pi^2}{GM} \\cdot a^3",
-        defaultParams: { orbitSemiMajorAxis: 10, starMass: 120 },
-        paramsList: [
-          { key: "orbitSemiMajorAxis", label: "Orbital Axis (a AU)", min: 4, max: 18, step: 0.5 },
-          { key: "starMass", label: "Central Solar Mass (M)", min: 40, max: 240, step: 10 }
-        ]
-      },
-      {
-        id: "blackhole",
-        name: "Schwarzspacetime Curvature",
-        desc: "Measure severe gravitational redshifting surrounding static event horizons.",
-        equation: "r_s = \\frac{2 G M}{c^2}",
-        defaultParams: { blackholeMass: 10, probeDistance: 22 },
-        paramsList: [
-          { key: "blackholeMass", label: "Black Hole Mass (M\u2609)", min: 5, max: 30, step: 1 },
-          { key: "probeDistance", label: "Probe Radius (r km)", min: 12, max: 40, step: 1 }
-        ]
-      },
-      {
-        id: "stellar",
-        name: "Stellar Collapse timeline",
-        desc: "Trigger core fuel fusion collapse based solely on initial stellar birth mass.",
-        equation: "M_{initial} \\implies remnants",
-        defaultParams: { initialMass: 8 },
-        paramsList: [{ key: "initialMass", label: "Initial Birth Mass (M\u2609)", min: 0.1, max: 40, step: 0.5 }]
-      },
-      {
-        id: "cosmology",
-        name: "Hubble Expanding Universe",
-        desc: "Observe dynamic Doppler galaxy redshifting relative to cosmic expansion boundaries.",
-        equation: "v = H_0 \\cdot d",
-        defaultParams: { hubbleConstant: 70 },
-        paramsList: [{ key: "hubbleConstant", label: "Hubble Constant (H\u2080)", min: 50, max: 90, step: 2 }]
-      },
-      {
-        id: "nebula",
-        name: "Jeans Nebula Collapse",
-        desc: "Observe how gas pressure balances thermal limits to trigger dust star collapse.",
-        equation: "M_J \\propto T^{3/2} \\cdot \\rho^{-1/2}",
-        defaultParams: { dustDensity: 4, gasTemp: 20 },
-        paramsList: [
-          { key: "dustDensity", label: "Gas Core Density (\u03c1)", min: 1, max: 10, step: 0.5 },
-          { key: "gasTemp", label: "Cloud Temperature (T K)", min: 5, max: 50, step: 1 }
-        ]
-      },
-      {
-        id: "tides",
-        name: "Lunar Tidal Bulge Pull",
-        desc: "Model dynamic planetary ocean bulge elevations pulled by gravity.",
-        equation: "F_{tidal} \\propto \\frac{M_{moon}}{d^3}",
-        defaultParams: { moonDistance: 8 },
-        paramsList: [{ key: "moonDistance", label: "Orbital Distance (d Earth radii)", min: 4, max: 15, step: 0.5 }]
-      },
-      {
-        id: "magnetosphere",
-        name: "Solar Wind Deflection",
-        desc: "Observe planetary core dipoles redirecting high-energy coronal mass ions.",
-        equation: "r_{magneto} \\propto B^{1/3}",
-        defaultParams: { windVelocity: 5, fieldStrength: 8 },
-        paramsList: [
-          { key: "windVelocity", label: "Solar Wind Speed (v)", min: 1, max: 10, step: 0.5 },
-          { key: "fieldStrength", label: "Core Dipole Power (B)", min: 2, max: 15, step: 0.5 }
-        ]
-      },
-      {
-        id: "pulsar",
-        name: "Relativistic Pulsar Jet",
-        desc: "Examine high-speed magnetic field rotations emitting massive radio cones.",
-        equation: "P_{spin} \\approx ms",
-        defaultParams: { rotationSpeed: 6 },
-        paramsList: [{ key: "rotationSpeed", label: "Spin Period (milliseconds)", min: 1, max: 20, step: 0.5 }]
-      }
-    ]
-  }
+/** Safe placeholder for legacy history rows that predate the AI schema. */
+const EMPTY_LEGACY_INTERPRETATION: HistoryRun['aiInterpretation'] = {
+  explanation: 'No stored analysis exists for this run.',
+  keyInsights: [],
+  concepts: [],
+  recommendedActions: [],
 };
 
-// Domain-to-icon fallback map (used when API config omits icon references)
-const DOMAIN_ICONS: Record<ScientificDomain, LucideIcon> = {
-  physics: Atom,
-  biology: Compass,
-  anatomy: Heart,
-  mathematics: Landmark,
-  quantum: Brain,
-  space: Orbit,
-};
+/** Non-finite guard for displayed measurements (never render "NaN"). */
+function formatParamValue(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(1) : '—';
+}
+
+/**
+ * S-04 telemetry isolation: the floating readout badge is the only UI driven
+ * by the 10Hz telemetry snapshot. Memoizing it confines telemetry-triggered
+ * re-renders to this badge (and the canvas layer) instead of re-reconciling
+ * the whole lab every sync. Props are primitives + stable strings, so the
+ * memo boundary is effective; no global state library involved.
+ */
+const TelemetryReadoutBadge = memo(function TelemetryReadoutBadge({
+  name,
+  equation,
+  accentHex,
+  isConceptual,
+  timeStep,
+  simulationTime,
+}: {
+  name: string;
+  equation: string;
+  accentHex: string;
+  isConceptual: boolean;
+  timeStep: number;
+  simulationTime: number;
+}) {
+  return (
+    <div className="px-3 py-1.5 rounded-lg bg-black/45 border border-white/5 backdrop-blur-md font-mono text-[10px] tracking-wider text-muted-foreground/60 flex items-center gap-2.5">
+      <span
+        className="w-1.5 h-1.5 rounded-full shrink-0"
+        style={{
+          background: accentHex,
+          boxShadow: `0 0 6px ${accentHex}`,
+        }}
+      />
+      <span className="text-primary font-bold">{name}</span>
+      <span className="w-px h-2.5 bg-white/10" />
+      <span>{presentEquation(equation)}</span>
+      {/* Only canvas labs emit real telemetry — hide the frame for conceptual HUD */}
+      {!isConceptual && (
+        <>
+          <span className="w-px h-2.5 bg-white/10" />
+          <span>Frame {timeStep}</span>
+          {/* Physical clock (seconds) — frame-rate independent (S-03) */}
+          <span className="text-muted-foreground/40">t {simulationTime.toFixed(1)}s</span>
+        </>
+      )}
+    </div>
+  );
+});
+
 
 // ============================================================================
 // MAIN REAL-TIME SCIENTIFIC SIMULATION ENGINE COMPONENT
 // ============================================================================
 export function SimulationRunner({ slug }: { slug: string }) {
-  const [domainsConfig, setDomainsConfig] = useState<Record<ScientificDomain, SimulationDomainConfig> | null>(null);
+  const [domainsConfig, setDomainsConfig] = useState<Record<ScientificDomain, RunnerDomainConfig> | null>(null);
   const [isLoadingConfig, setIsLoadingConfig] = useState<boolean>(true);
 
   // States
@@ -626,16 +151,30 @@ export function SimulationRunner({ slug }: { slug: string }) {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(true);
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [historyRuns, setHistoryRuns] = useState<HistoryRun[]>([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   // Asynchronous Intel Drawer States
   const [aiOpen, setAiOpen] = useState<boolean>(false);
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
   const [aiStreamText, setAiStreamText] = useState<string>("");
   const [aiResult, setAiResult] = useState<HistoryRun['aiInterpretation'] | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [userQuestion, setUserQuestion] = useState<string>("");
 
+  // Conceptual labs animate inside the SVG HUD: bump this counter to rewind
+  // the HUD's phase when the toolbar reset is pressed without a canvas engine.
+  const [conceptualResetTick, setConceptualResetTick] = useState<number>(0);
+
+  // Natural-language experiment input mode (toggleable inside the AI drawer)
+  const [nlMode, setNlMode] = useState<'traditional' | 'natural-language'>('traditional');
+
   // Live Sync Telemetry Overlay State
-  const [telemetrySnap, setTelemetrySnap] = useState<TelemetrySnapshot>({ timeStep: 0, stateSnapshot: {} });
+  const [telemetrySnap, setTelemetrySnap] = useState<TelemetrySnapshot>({
+    timeStep: 0,
+    simulationTime: 0,
+    stateType: getSimulationStateType(activeSimId),
+    stateSnapshot: {},
+  });
 
   // Slider view parameters
   const [localParams, setLocalParams] = useState<Record<string, number>>({});
@@ -645,13 +184,20 @@ export function SimulationRunner({ slug }: { slug: string }) {
   const historyCacheRef = useRef<Record<string, HistoryRun[]>>({});
   const pendingParamUpdatesRef = useRef<Record<string, number>>({});
   const paramUpdateRafRef = useRef<number | null>(null);
+  // AI-generated configuration to seed the next engine instantiation with,
+  // instead of registry defaults (consumed by the engine-creation effect).
+  const nlParamOverrideRef = useRef<{
+    simulationId: string;
+    domain: ScientificDomain;
+    parameters: Record<string, number>;
+  } | null>(null);
 
   const activeDomainConfig = useMemo(
     () => (domainsConfig ? domainsConfig[activeDomain] : null),
     [domainsConfig, activeDomain]
   );
 
-  const activeSim = useMemo<SubSimulation | null>(
+  const activeSim = useMemo<ClientSimulation | null>(
     () =>
       activeDomainConfig
         ? activeDomainConfig.simulations.find((s) => s.id === activeSimId) || activeDomainConfig.simulations[0]
@@ -662,18 +208,21 @@ export function SimulationRunner({ slug }: { slug: string }) {
   const isConceptual = useMemo(() => !isInteractiveSim(activeSimId), [activeSimId]);
 
   const flushPendingEngineUpdates = useCallback(() => {
+    // Always release the RAF handle and clear the pending batch, even when no
+    // engine exists (e.g. conceptual labs). Otherwise paramUpdateRafRef stays
+    // non-null forever and every later slider change is silently dropped.
+    const rafId = paramUpdateRafRef.current;
+    paramUpdateRafRef.current = null;
+    if (rafId !== null) cancelAnimationFrame(rafId);
+
     const engine = engineRef.current;
     const pending = pendingParamUpdatesRef.current;
+    pendingParamUpdatesRef.current = {};
     if (!engine || Object.keys(pending).length === 0) return;
 
     Object.entries(pending).forEach(([key, value]) => {
       engine.updateParameter(key, value);
     });
-    pendingParamUpdatesRef.current = {};
-    if (paramUpdateRafRef.current) {
-      cancelAnimationFrame(paramUpdateRafRef.current);
-      paramUpdateRafRef.current = null;
-    }
   }, []);
 
   const scheduleEngineParameterUpdate = useCallback((key: string, value: number) => {
@@ -686,80 +235,89 @@ export function SimulationRunner({ slug }: { slug: string }) {
   }, [flushPendingEngineUpdates]);
 
   useEffect(() => {
-    return () => {
-      if (paramUpdateRafRef.current) {
-        cancelAnimationFrame(paramUpdateRafRef.current);
+    // Background-tab safety (RC-02): rAF is suspended while the tab is
+    // hidden, so slider changes made there would otherwise sit unapplied in
+    // the pending batch until the tab re-paints. Flush them on visibility
+    // return so the engine never silently runs stale parameters.
+    const onVisibilityVisible = () => {
+      if (!document.hidden && paramUpdateRafRef.current !== null) {
+        flushPendingEngineUpdates();
       }
     };
-  }, []);
+    document.addEventListener('visibilitychange', onVisibilityVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityVisible);
+      if (paramUpdateRafRef.current) {
+        cancelAnimationFrame(paramUpdateRafRef.current);
+        paramUpdateRafRef.current = null;
+      }
+    };
+  }, [flushPendingEngineUpdates]);
 
   // Fetch Database Configurations on mount
   useEffect(() => {
     let isMounted = true;
+
+    // Resolve the initial domain + simulation from the URL slug (can be a
+    // domain key or a simulation id) against a typed config record.
+    const resolveSlug = (mapping: Record<ScientificDomain, RunnerDomainConfig>) => {
+      let initialDomain: ScientificDomain = 'physics';
+      let initialSimId = '';
+
+      for (const domKey of DOMAIN_ORDER) {
+        const domConfig = mapping[domKey];
+        if (slug === domKey) {
+          initialDomain = domKey;
+          initialSimId = domConfig.simulations[0]?.id || '';
+          break;
+        }
+        const matched = domConfig.simulations.find((sim) => sim.id === slug);
+        if (matched) {
+          initialDomain = domKey;
+          initialSimId = matched.id;
+          break;
+        }
+      }
+
+      if (!initialSimId && mapping[initialDomain]) {
+        initialSimId = mapping[initialDomain].simulations[0]?.id || 'relativity';
+      }
+      return { initialDomain, initialSimId };
+    };
+
+    // Attach presentation icons to the API payload record (type-safe:
+    // RunnerDomainConfig = payload + icon).
+    const withIcons = (payload: Record<ScientificDomain, SimulationDomainConfig>): Record<ScientificDomain, RunnerDomainConfig> =>
+      DOMAIN_ORDER.reduce((acc, domain) => {
+        acc[domain] = {
+          ...payload[domain],
+          icon: DOMAIN_STYLES[domain].icon,
+        };
+        return acc;
+      }, {} as Record<ScientificDomain, RunnerDomainConfig>);
+
     const resolveInitialConfig = async () => {
       try {
         const fetchedConfig = await fetchSimulationConfig();
-        const mapping = fetchedConfig || LOCAL_FALLBACK_CONFIG;
+        const mapping = withIcons(fetchedConfig || LOCAL_FALLBACK_CONFIG);
 
         if (!isMounted) return;
-        setDomainsConfig(mapping as Record<ScientificDomain, SimulationDomainConfig>);
+        setDomainsConfig(mapping);
 
-        let initialDomain = 'physics' as ScientificDomain;
-        let initialSimId = '';
-
-        outerLoop1: for (const [domKey, domConfig] of Object.entries(mapping) as Array<[ScientificDomain, SimulationDomainConfig]>) {
-          if (slug === domKey) {
-            initialDomain = domKey;
-            initialSimId = domConfig.simulations[0]?.id || '';
-            break outerLoop1;
-          }
-          for (const sim of domConfig.simulations) {
-            if (slug === sim.id) {
-              initialDomain = domKey;
-              initialSimId = sim.id;
-              break outerLoop1;
-            }
-          }
-        }
-
-        if (!initialSimId && mapping[initialDomain]) {
-          initialSimId = mapping[initialDomain].simulations[0]?.id || 'relativity';
-        }
-
-        const activeSimObj = mapping[initialDomain]?.simulations.find((s) => s.id === initialSimId) || mapping[initialDomain]?.simulations[0];
-        setActiveDomain(initialDomain);
-        setActiveSimId(initialSimId);
+        const resolved = resolveSlug(mapping);
+        setActiveDomain(resolved.initialDomain);
+        setActiveSimId(resolved.initialSimId);
+        const activeSimObj = mapping[resolved.initialDomain]?.simulations.find((s) => s.id === resolved.initialSimId) || mapping[resolved.initialDomain]?.simulations[0];
         if (activeSimObj) setLocalParams(activeSimObj.defaultParams ?? {});
       } catch (err) {
         console.warn("[Simulation Config Loader] Failed, using local client fallbacks:", err);
         if (!isMounted) return;
         setDomainsConfig(LOCAL_FALLBACK_CONFIG);
 
-        let initialDomain = 'physics' as ScientificDomain;
-        let initialSimId = '';
-
-        outerLoop2: for (const [domKey, domConfig] of Object.entries(LOCAL_FALLBACK_CONFIG) as Array<[ScientificDomain, SimulationDomainConfig]>) {
-          if (slug === domKey) {
-            initialDomain = domKey;
-            initialSimId = domConfig.simulations[0]?.id || '';
-            break outerLoop2;
-          }
-          for (const sim of domConfig.simulations) {
-            if (slug === sim.id) {
-              initialDomain = domKey;
-              initialSimId = sim.id;
-              break outerLoop2;
-            }
-          }
-        }
-
-        if (!initialSimId && LOCAL_FALLBACK_CONFIG[initialDomain]) {
-          initialSimId = LOCAL_FALLBACK_CONFIG[initialDomain].simulations[0]?.id || 'relativity';
-        }
-
-        const activeSimObj = LOCAL_FALLBACK_CONFIG[initialDomain].simulations.find((s) => s.id === initialSimId) || LOCAL_FALLBACK_CONFIG[initialDomain].simulations[0];
-        setActiveDomain(initialDomain);
-        setActiveSimId(initialSimId);
+        const resolved = resolveSlug(LOCAL_FALLBACK_CONFIG);
+        setActiveDomain(resolved.initialDomain);
+        setActiveSimId(resolved.initialSimId);
+        const activeSimObj = LOCAL_FALLBACK_CONFIG[resolved.initialDomain].simulations.find((s) => s.id === resolved.initialSimId) || LOCAL_FALLBACK_CONFIG[resolved.initialDomain].simulations[0];
         if (activeSimObj) setLocalParams(activeSimObj.defaultParams ?? {});
       } finally {
         if (isMounted) setIsLoadingConfig(false);
@@ -794,9 +352,34 @@ export function SimulationRunner({ slug }: { slug: string }) {
     };
   }, [resetActivityTimer]);
 
+  // EDGE-05: clear the previous simulation's telemetry on sim switch so the
+  // floating badge cannot show the old lab's time under the new lab's name.
+  // Deliberately a render-time adjustment (before the engine effect): React
+  // re-renders immediately with the cleared snapshot, so the engine
+  // instantiation effect never sees the stale badge.
+  const [prevTelemetrySimId, setPrevTelemetrySimId] = useState(activeSimId);
+  if (prevTelemetrySimId !== activeSimId) {
+    setPrevTelemetrySimId(activeSimId);
+    setTelemetrySnap({
+      timeStep: 0,
+      simulationTime: 0,
+      stateType: getSimulationStateType(activeSimId),
+      stateSnapshot: {},
+    });
+  }
+
   // Instantiates decoupled core engine when Sim toggles
   useEffect(() => {
     let syncTimer: number | null = null;
+
+    // Param updates and coalesced RAF flushes are per-simulation: drop any
+    // stale batch from the previously running lab so it cannot leak into the
+    // engine created below.
+    pendingParamUpdatesRef.current = {};
+    if (paramUpdateRafRef.current !== null) {
+      cancelAnimationFrame(paramUpdateRafRef.current);
+      paramUpdateRafRef.current = null;
+    }
 
     if (engineRef.current) {
       engineRef.current.destroy();
@@ -805,12 +388,24 @@ export function SimulationRunner({ slug }: { slug: string }) {
 
     if (!activeSim) return;
 
+    // Natural-language overrides: if an AI-generated configuration targets the
+    // upcoming simulation, seed the engine with it instead of registry defaults.
+    const nlOverride = nlParamOverrideRef.current;
+    const initialParams =
+      nlOverride &&
+      nlOverride.simulationId === activeSimId &&
+      nlOverride.domain === activeDomain
+        ? nlOverride.parameters
+        : activeSim.defaultParams;
+    nlParamOverrideRef.current = null;
+
     // Conceptual labs have no Canvas engine — the SVG HUD handles rendering.
     if (isConceptual) {
       syncTimer = window.setTimeout(() => {
-        setLocalParams(activeSim.defaultParams);
+        setLocalParams(initialParams);
         setAiStreamText("");
         setAiResult(null);
+        setAiError(null);
       }, 0);
       return () => {
         if (syncTimer !== null) window.clearTimeout(syncTimer);
@@ -824,7 +419,7 @@ export function SimulationRunner({ slug }: { slug: string }) {
       canvas,
       activeDomain,
       activeSimId,
-      activeSim.defaultParams,
+      initialParams,
       (snap) => {
         setTelemetrySnap(snap);
       }
@@ -835,9 +430,10 @@ export function SimulationRunner({ slug }: { slug: string }) {
     engine.start();
 
     syncTimer = window.setTimeout(() => {
-      setLocalParams(activeSim.defaultParams);
+      setLocalParams(initialParams);
       setAiStreamText("");
       setAiResult(null);
+      setAiError(null);
     }, 0);
 
     return () => {
@@ -850,20 +446,32 @@ export function SimulationRunner({ slug }: { slug: string }) {
   }, [activeSimId, activeDomain, activeSim, isLoadingConfig, isConceptual]);
 
   useEffect(() => {
-    if (engineRef.current) {
-      engineRef.current.isRunning = isRunning;
-    }
+    // S-04: Pausing suspends the engine's rAF loop entirely — no physics, no
+    // render work, no telemetry emission — and resume restarts a single clean
+    // loop whose first frame uses a safe nominal delta (the paused wall-clock
+    // duration is never absorbed).
+    const engine = engineRef.current;
+    if (!engine) return;
+    if (isRunning) engine.resume();
+    else engine.pause();
   }, [isRunning]);
 
   useEffect(() => {
     if (!showHistory || !activeSimId) return;
-    if (historyCacheRef.current[activeSimId]) {
-      setHistoryRuns(historyCacheRef.current[activeSimId]);
-      return;
-    }
 
     let active = true;
     const loadHistory = async () => {
+      // Cache hit: serve synchronously-available data from the callback
+      // (never from the effect body — the lint contract forbids setState
+      // directly inside the effect) and clear any stale error from a
+      // previous failed fetch.
+      if (historyCacheRef.current[activeSimId]) {
+        if (!active) return;
+        setHistoryRuns(historyCacheRef.current[activeSimId]);
+        setHistoryError(null);
+        return;
+      }
+
       try {
         const response = await fetch(`/api/simulations/history?simulationId=${activeSimId}&limit=5`, {
           credentials: "include",
@@ -873,9 +481,14 @@ export function SimulationRunner({ slug }: { slug: string }) {
         if (body.success && body.data) {
           historyCacheRef.current[activeSimId] = body.data;
           setHistoryRuns(body.data);
+          setHistoryError(null);
         }
       } catch (e) {
+        // UX-07: a failed history fetch must not masquerade as an empty
+        // history — surface the failure to the user instead.
         console.warn("Failed fetching history runs:", e);
+        setHistoryRuns([]);
+        setHistoryError("Calibration history couldn't be loaded.");
       }
     };
 
@@ -890,16 +503,80 @@ export function SimulationRunner({ slug }: { slug: string }) {
     scheduleEngineParameterUpdate(key, val);
   }, [scheduleEngineParameterUpdate]);
 
+  // Full reset per the simulation contract: return the current simulation to
+  // a clean initial state using the registry defaults — engine time, engine
+  // state, parameters (React + engine), telemetry, and assessment output.
+  const handleFullReset = useCallback(() => {
+    if (!activeSim) return;
+
+    // RC-01: drain any deferred slider batch BEFORE resetting. Without this,
+    // a slider drag followed immediately by Reset lets the next RAF flush
+    // re-apply the stale pre-reset user value into engine.parameters after
+    // resetTime() — leaving sliders at defaults while the engine runs the
+    // wrong experiment.
+    pendingParamUpdatesRef.current = {};
+    if (paramUpdateRafRef.current !== null) {
+      cancelAnimationFrame(paramUpdateRafRef.current);
+      paramUpdateRafRef.current = null;
+    }
+
+    setLocalParams(activeSim.defaultParams);
+
+    const engine = engineRef.current;
+    if (engine) {
+      // Synchronize engine parameters with the restored defaults BEFORE
+      // resetting state, so re-initialized sub-simulations (immune, virus,
+      // graph, probability) are seeded with the clean configuration.
+      Object.entries(activeSim.defaultParams).forEach(([key, value]) => {
+        engine.updateParameter(key, value);
+      });
+      engine.resetTime();
+    } else {
+      // Conceptual labs have no canvas engine: rewind the HUD animation phase.
+      setConceptualResetTick((t) => t + 1);
+    }
+
+    // Clear telemetry state and any stale assessment/stream output.
+    setTelemetrySnap({
+      timeStep: 0,
+      simulationTime: 0,
+      stateType: getSimulationStateType(activeSim.id),
+      stateSnapshot: {},
+    });
+    setAiStreamText("");
+    setAiResult(null);
+    setAiError(null);
+  }, [activeSim]);
+
+  // Parameter-only default restore. Observations (P3 runtime audit, PHYS-04):
+  // a "Defaults" action must not leave a dynamic simulation running from grown
+  // state under default sliders — that is an internal inconsistency users read
+  // as a bug. Route it through the same deterministic reset contract as the
+  // toolbar reset: parameters + engine time/state + telemetry.
+  const handleResetParams = useCallback(() => {
+    handleFullReset();
+  }, [handleFullReset]);
+
   const handleSparkAIInterpretation = async () => {
     if (isAiLoading || !activeSim) return;
     setAiOpen(true);
     setIsAiLoading(true);
     setAiStreamText("");
     setAiResult(null);
+    setAiError(null);
 
     const eng = engineRef.current;
     const paramsSnapshot = eng ? { ...eng.parameters } : localParams;
-    const stateSnapshot = eng ? { ...eng.stateSnapshot } : {};
+    // S-07 assessment payload contract: distinguish real measured state from
+    // parameter-driven renders and conceptual visualizations. Dynamic engines
+    // send their live snapshot; parameterized engines communicate the render
+    // clock; conceptual labs signal explicitly that no dynamic state exists —
+    // never an empty "no state" object.
+    const stateType = eng ? eng.stateType : 'conceptual';
+    const simulationTime = eng ? eng.simulationTime : undefined;
+    const stateSnapshot = eng
+      ? { ...eng.stateSnapshot }
+      : { visualizationState: 'conceptual' };
 
     try {
       // SIM-BUG-002: Use credential-forwarding cookies (neuron_session httpOnly) instead of insecure localStorage
@@ -912,11 +589,26 @@ export function SimulationRunner({ slug }: { slug: string }) {
           simulationId: activeSimId,
           parameters: paramsSnapshot,
           stateSnapshot,
+          stateType,
+          simulationTime,
           userQuestion: userQuestion ? userQuestion.trim() : undefined
         })
       });
 
-      if (!response.ok) throw new Error("API Connection failed");
+      if (!response.ok) {
+        // Surface the server's own message (e.g. 429 rate-limit responses)
+        // instead of genericizing every failure into a connection error.
+        let message = "API Connection failed";
+        try {
+          const body = await response.json();
+          const serverMessage =
+            body?.error?.message ?? body?.message ?? (typeof body === "string" ? body : null);
+          if (typeof serverMessage === "string" && serverMessage.length > 0) {
+            message = serverMessage;
+          }
+        } catch {}
+        throw new Error(message);
+      }
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -946,17 +638,13 @@ export function SimulationRunner({ slug }: { slug: string }) {
           }
         }
       }
-    } catch {
-      setAiStreamText("Initializing local scientifically compiled fallback assessment...");
-      setTimeout(() => {
-        setAiResult({
-          explanation: `Dynamic system active under localized domain constraints. Parameters tuned to: ${Object.entries(paramsSnapshot).map(([k,v]) => `${k}=${v}`).join(', ')}.`,
-          keyInsights: ["Local telemetry calibrated.", "Interactive vector graphics synthesized at 60 FPS."],
-          concepts: [activeDomain.toUpperCase(), activeSimId.toUpperCase()],
-          recommendedActions: ["Modify variables in the collapsible telemetry slider drawer."]
-        });
-        setAiStreamText(`[EXPLANATION]\nDynamic system active under localized domain constraints.\n\n[KEY INSIGHTS]\n- Local telemetry calibrated.\n- Interactive vector graphics synthesized at 60 FPS.`);
-      }, 500);
+    } catch (e) {
+      console.warn("[Spark AI] Interpretation failed, surfacing explicit error state:", e);
+      setAiStreamText("");
+      setAiResult(null);
+      setAiError(
+        "Unable to reach the analysis service. The simulation is still running locally — retry the assessment or keep experimenting with the live lab."
+      );
     } finally {
       setIsAiLoading(false);
       setUserQuestion("");
@@ -964,19 +652,57 @@ export function SimulationRunner({ slug }: { slug: string }) {
   };
 
   const loadHistoryItem = (item: HistoryRun) => {
-    setLocalParams(item.parameters);
+    if (!activeSim) return;
+    // VAL-02: persisted parameters can be out-of-registry (legacy rows, or
+    // writes from a bypassing client). Clamp them into the registry ranges
+    // before touching the engine so a restored value (e.g. mass=0 → a=∞,
+    // v≥1 → √(1−v²)=NaN) can never poison live physics.
+    const { clamped } = clampSimulationParameters(activeSim.id, activeDomain, item.parameters || {});
+    setLocalParams(clamped);
     if (engineRef.current) {
-      Object.entries(item.parameters).forEach(([k, v]) => {
-        engineRef.current?.updateParameter(k, v as number);
+      Object.entries(clamped).forEach(([k, v]) => {
+        engineRef.current?.updateParameter(k, v);
       });
     }
-    setAiResult(item.aiInterpretation);
+    // Stale/pre-schema history rows must not crash the runner: present them
+    // with a safe placeholder instead of dereferencing undefined fields.
+    const interpretation = item.aiInterpretation ?? EMPTY_LEGACY_INTERPRETATION;
+    setAiResult(interpretation);
     setAiStreamText(
-      `[EXPLANATION]\n${item.aiInterpretation.explanation}\n\n[KEY INSIGHTS]\n${item.aiInterpretation.keyInsights.map((i: string) => `- ${i}`).join('\n')}`
+      `[EXPLANATION]\n${interpretation.explanation}\n\n[KEY INSIGHTS]\n${(interpretation.keyInsights ?? []).map((i: string) => `- ${i}`).join('\n')}`
     );
     setShowHistory(false);
     setAiOpen(true);
+    setAiError(null);
   };
+
+  // Applies an AI-generated configuration: same execution path as slider input.
+  const handleNlApply = useCallback((ready: NlReadyResult) => {
+    const engine = engineRef.current;
+    const sameSim =
+      !!engine && engine.simId === ready.simulationId && engine.domain === ready.domain;
+
+    if (sameSim && isInteractiveSim(ready.simulationId)) {
+      Object.entries(ready.parameters).forEach(([key, value]) => {
+        engine.updateParameter(key, value);
+      });
+      setLocalParams(ready.parameters);
+    } else if (sameSim) {
+      setLocalParams(ready.parameters);
+    } else {
+      nlParamOverrideRef.current = {
+        simulationId: ready.simulationId,
+        domain: ready.domain,
+        parameters: ready.parameters,
+      };
+      setActiveDomain(ready.domain);
+      setActiveSimId(ready.simulationId);
+      setLocalParams(ready.parameters);
+    }
+
+    setUiActive(true);
+    setAiOpen(false);
+  }, []);
 
   if (isLoadingConfig || !activeSim || !domainsConfig) {
     return (
@@ -1003,6 +729,8 @@ export function SimulationRunner({ slug }: { slug: string }) {
           accent={activeDomainConfig?.accentHex || "#3b82f6"}
           sim={activeSim}
           params={localParams}
+          isRunning={isRunning}
+          resetTick={conceptualResetTick}
         />
       ) : (
         <div className="absolute inset-0 w-full h-full z-0 rounded-2xl overflow-hidden">
@@ -1016,17 +744,20 @@ export function SimulationRunner({ slug }: { slug: string }) {
         </div>
       )}
 
-      {/* Floating Single-Line HUD Readout Overlay (Hides on inactivity) */}
-      <div className={`absolute top-6 left-6 z-10 font-mono text-[10px] tracking-wider text-muted-foreground/60 flex items-center gap-3 transition-all duration-500 ease-out select-none pointer-events-none ${
+      {/* Floating HUD Readout Overlay (Hides on inactivity) */}
+      <div className={`absolute top-6 left-6 z-10 transition-all duration-500 ease-out select-none pointer-events-none ${
         uiActive 
           ? "opacity-100 scale-100 translate-y-0" 
           : "opacity-0 scale-[0.98] -translate-y-2"
       }`}>
-        <span className="text-primary font-bold">{activeSim.name}</span>
-        <span className="w-px h-2.5 bg-white/10" />
-        <span>{activeSim.equation}</span>
-        <span className="w-px h-2.5 bg-white/10" />
-        <span>Frame: {telemetrySnap.timeStep}</span>
+        <TelemetryReadoutBadge
+          name={activeSim.name}
+          equation={activeSim.equation}
+          accentHex={activeDomainConfig?.accentHex || '#3b82f6'}
+          isConceptual={isConceptual}
+          timeStep={telemetrySnap.timeStep}
+          simulationTime={telemetrySnap.simulationTime}
+        />
       </div>
 
       {/* Top Floating Systems Console Bar (Hides on inactivity) */}
@@ -1046,13 +777,20 @@ export function SimulationRunner({ slug }: { slug: string }) {
         <button
           onClick={() => setIsRunning(!isRunning)}
           aria-label={isRunning ? "Pause simulation" : "Resume simulation"}
-          className="p-2 rounded-lg bg-black/45 border border-white/5 hover:border-white/15 text-muted-foreground hover:text-white transition-all backdrop-blur-md"
+          className={`p-2 rounded-lg bg-black/45 border border-white/5 backdrop-blur-md transition-all flex items-center gap-1.5 ${
+            isRunning 
+              ? 'text-emerald-400/90 hover:border-emerald-400/25' 
+              : 'text-amber-400/90 hover:border-amber-400/25'
+          }`}
         >
           {isRunning ? <Pause size={12} /> : <Play size={12} />}
+          <span className={`text-[8px] font-black uppercase tracking-widest ${isRunning ? 'text-emerald-400/80' : 'text-amber-400/80'}`}>
+            {isRunning ? 'Run' : 'Paused'}
+          </span>
         </button>
 
         <button
-          onClick={() => { engineRef.current?.resetTime(); }}
+          onClick={handleFullReset}
           aria-label="Reset simulation"
           className="p-2 rounded-lg bg-black/45 border border-white/5 hover:border-white/15 text-muted-foreground hover:text-white transition-all backdrop-blur-md"
         >
@@ -1080,27 +818,59 @@ export function SimulationRunner({ slug }: { slug: string }) {
           ? "opacity-100 scale-100 translate-y-0 pointer-events-auto" 
           : "opacity-0 scale-[0.98] translate-y-4 pointer-events-none"
       }`}>
-        <div className="bg-black/20 border border-white/5 rounded-2xl shadow-2xl backdrop-blur-sm overflow-hidden p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {activeSim.paramsList.map((p: SubSimulation["paramsList"][number]) => {
-            const val = localParams[p.key] ?? p.min;
-            return (
-              <div key={p.key} className="space-y-1">
-                <div className="flex justify-between items-center text-[10px] font-mono">
-                  <span className="text-muted-foreground font-semibold tracking-wider uppercase">{p.label}</span>
-                  <span className="text-primary font-bold">{val.toFixed(p.step < 0.1 ? 2 : 1)}</span>
+        <div className="bg-black/20 border border-white/5 rounded-2xl shadow-2xl backdrop-blur-sm overflow-hidden p-3.5 space-y-3">
+          <div className="flex items-center justify-between px-0.5">
+            <span className="text-[8px] font-black tracking-widest text-muted-foreground uppercase flex items-center gap-1.5">
+              <span
+                className="w-1 h-1 rounded-full"
+                style={{ background: activeDomainConfig?.accentHex || '#3b82f6' }}
+              />
+              Live Parameters
+            </span>
+            <button
+              onClick={handleResetParams}
+              className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-widest text-muted-foreground/60 hover:text-foreground border border-white/5 hover:border-white/15 transition-colors flex items-center gap-1"
+            >
+              <RefreshCw size={8} /> Defaults
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+            {activeSim.paramsList.map((p: SimulationParameter) => {
+              const val = localParams[p.key] ?? p.min;
+              return (
+                <div key={p.key} className="rounded-lg border border-white/5 bg-white/2 p-2.5 space-y-1.5">
+                  <div className="flex justify-between items-center text-[10px] font-mono">
+                    {/* UX-01: render the registry unit beside the value (and
+                        strip it from the label when already embedded, so the
+                        unit is never shown twice). */}
+                    <span className="text-muted-foreground font-semibold tracking-wider uppercase truncate">
+                      {p.unit
+                        ? p.label.replace(new RegExp(`\\s*\\(${p.unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)$`), '')
+                        : p.label}
+                    </span>
+                    <span className="text-primary font-bold tabular-nums">
+                      {p.type === 'integer' ? String(Math.round(val)) : val.toFixed(p.step < 0.1 ? 2 : 1)}
+                      {p.unit ? ` ${p.unit}` : ''}
+                    </span>
+                  </div>
+                  <input 
+                    type="range"
+                    min={p.min}
+                    max={p.max}
+                    step={p.step}
+                    value={val}
+                    onChange={(e) => handleSliderChange(p.key, parseFloat(e.target.value))}
+                    className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(59,130,246,0.4)] transition-all"
+                  />
+                  <div className="flex justify-between text-[7px] font-mono text-muted-foreground/40 select-none">
+                    <span>{p.min}{p.unit ? ` ${p.unit}` : ''}</span>
+                    <span>step {p.step}</span>
+                    <span>{p.max}{p.unit ? ` ${p.unit}` : ''}</span>
+                  </div>
                 </div>
-                <input 
-                  type="range"
-                  min={p.min}
-                  max={p.max}
-                  step={p.step}
-                  value={val}
-                  onChange={(e) => handleSliderChange(p.key, parseFloat(e.target.value))}
-                  className="w-full h-1 bg-white/10 rounded-full appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary [&::-webkit-slider-thumb]:shadow-[0_0_10px_rgba(59,130,246,0.4)] transition-all"
-                />
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -1118,13 +888,76 @@ export function SimulationRunner({ slug }: { slug: string }) {
           <button 
             onClick={() => setAiOpen(false)}
             className="text-muted-foreground hover:text-white transition-colors"
+            aria-label="Close Spark AI panel"
           >
             <X size={14} />
           </button>
         </div>
 
+        {/* Mode toggle: traditional telemetry vs natural-language input */}
+        <div className="p-3 border-b border-white/5 flex gap-1.5 bg-black/25">
+          <button
+            onClick={() => setNlMode('traditional')}
+            className={`flex-1 py-1 rounded-md text-[9px] font-black uppercase tracking-widest transition-colors border ${
+              nlMode === 'traditional'
+                ? 'bg-secondary/15 border-secondary/30 text-secondary'
+                : 'bg-white/5 border-white/10 text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            Telemetry
+          </button>
+          <button
+            onClick={() => setNlMode('natural-language')}
+            className={`flex-1 py-1 rounded-md text-[9px] font-black uppercase tracking-widest transition-colors border flex items-center justify-center gap-1 ${
+              nlMode === 'natural-language'
+                ? 'bg-secondary/15 border-secondary/30 text-secondary'
+                : 'bg-white/5 border-white/10 text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            <Sparkles size={9} /> Describe
+          </button>
+        </div>
+
+        {nlMode === 'traditional' && (
+        <>
         {/* Console stream log */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-none max-h-[calc(100vh-140px)]">
+          {/* Assessment origin badge — AI output is never conflated with the
+              deterministic local fallback. */}
+          {aiResult?.metadata?.source && (
+            <div
+              className={`rounded-lg border px-2.5 py-1.5 text-[9px] font-mono leading-relaxed select-none ${
+                aiResult.metadata.source === "ai"
+                  ? "border-sci-ai/25 bg-sci-ai/10 text-sci-ai/90"
+                  : "border-white/10 bg-white/5 text-muted-foreground"
+              }`}
+              role="status"
+            >
+              {aiResult.metadata.source === "ai" ? (
+                <>
+                  <span className="font-black uppercase tracking-widest">AI Analysis</span>
+                  <span className="mx-1.5 opacity-50">·</span>
+                  {aiResult.metadata.aiModel || "configured model"}
+                </>
+              ) : (
+                <>
+                  <span className="font-black uppercase tracking-widest">Local Deterministic Analysis</span>
+                  <span className="mx-1.5 opacity-50">·</span>
+                  Generated without an AI model
+                  {aiResult.metadata.fallbackReason && (
+                    <>
+                      {" "}
+                      (reason:{" "}
+                      {FALLBACK_REASON_LABELS[aiResult.metadata.fallbackReason] ??
+                        aiResult.metadata.fallbackReason}
+                      )
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {isAiLoading && !aiStreamText && (
             <div className="flex flex-col items-center justify-center h-48 gap-3 text-center text-muted-foreground animate-pulse font-mono text-[10px] uppercase">
               <Orbit size={18} className="animate-spin text-secondary" />
@@ -1132,10 +965,22 @@ export function SimulationRunner({ slug }: { slug: string }) {
             </div>
           )}
 
-          {!isAiLoading && !aiStreamText && (
+          {!isAiLoading && !aiStreamText && !aiError && (
             <div className="flex flex-col items-center justify-center h-48 gap-2 text-center text-muted-foreground/45 select-none">
               <Brain size={20} className="text-secondary/20" />
               <p className="text-[10px] font-mono tracking-wider uppercase">Submit Telemetry Assessment to begin.</p>
+            </div>
+          )}
+
+          {aiError && !isAiLoading && (
+            <div className="rounded-xl border border-rose-400/25 bg-rose-400/10 p-3 space-y-2" role="alert">
+              <p className="text-[10px] font-mono text-rose-300/90 leading-relaxed">{aiError}</p>
+              <button
+                onClick={handleSparkAIInterpretation}
+                className="w-full py-1 bg-rose-400/15 border border-rose-400/30 text-rose-300 hover:bg-rose-400/25 transition-colors font-bold text-[10px] uppercase tracking-wider rounded-lg flex items-center justify-center gap-1.5"
+              >
+                <RefreshCw size={10} /> Retry Assessment
+              </button>
             </div>
           )}
 
@@ -1191,6 +1036,7 @@ export function SimulationRunner({ slug }: { slug: string }) {
             <button
               onClick={handleSparkAIInterpretation}
               disabled={isAiLoading}
+              aria-label="Submit telemetry assessment"
               className="px-2.5 rounded-lg bg-secondary text-secondary-foreground hover:bg-secondary/90 transition-colors flex items-center justify-center disabled:opacity-50"
             >
               <Send size={10} />
@@ -1206,6 +1052,12 @@ export function SimulationRunner({ slug }: { slug: string }) {
             {isAiLoading ? "Interpreting..." : "Telemetry Assessment"}
           </button>
         </div>
+        </>
+      )}
+
+      {nlMode === 'natural-language' && (
+        <NaturalLanguageInput onApply={handleNlApply} />
+      )}
       </div>
 
       {/* Left Laboratories Sidebar Selection Drawer */}
@@ -1214,44 +1066,67 @@ export function SimulationRunner({ slug }: { slug: string }) {
       }`}>
         <div className="p-4 border-b border-white/5 flex justify-between items-center bg-black/25">
           <span className="text-[10px] font-black uppercase text-white tracking-widest flex items-center gap-1.5">
-            <Orbit size={12} className="text-primary animate-spin" /> Laboratories
+            <span
+              className="w-1.5 h-1.5 rounded-full"
+              style={{
+                background: activeDomainConfig?.accentHex || '#3b82f6',
+                boxShadow: `0 0 8px ${activeDomainConfig?.accentHex || '#3b82f6'}`,
+              }}
+            />
+            Laboratories
           </span>
           <button 
             onClick={() => setSidebarOpen(false)}
             className="text-muted-foreground hover:text-white transition-colors"
+            aria-label="Close laboratories panel"
           >
             <X size={14} />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-none">
-          {(Object.entries(domainsConfig) as Array<[ScientificDomain, SimulationDomainConfig]>).map(([domKey, domConfig]) => {
-            const Icon = domConfig.icon || DOMAIN_ICONS[domKey];
+          <span className="block px-1 text-[8px] font-black tracking-widest text-muted-foreground/40 uppercase">Domains</span>
+          {DOMAIN_ORDER.map((domKey) => {
+            const domConfig = domainsConfig[domKey];
+            const Icon = domConfig.icon;
             const isActive = activeDomain === domKey;
             
             return (
               <div key={domKey} className="space-y-1">
                 <button
                   onClick={() => {
-                    setActiveDomain(domKey as ScientificDomain);
+                    setActiveDomain(domKey);
                     setActiveSimId(domConfig.simulations[0].id);
                   }}
                   className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center justify-between text-[10px] uppercase font-bold tracking-wider transition-all ${
                     isActive 
-                      ? 'bg-white/5 border border-white/10 text-white' 
+                      ? 'text-white' 
                       : 'text-muted-foreground hover:text-foreground hover:bg-white/5 border border-transparent'
                   }`}
+                  style={isActive ? {
+                    backgroundColor: `${domConfig.accentHex}14`,
+                    borderColor: `${domConfig.accentHex}33`,
+                    boxShadow: `inset 0 0 12px ${domConfig.accentHex}0d`,
+                  } : undefined}
                 >
                   <span className="flex items-center gap-2">
-                    <Icon size={12} className={isActive ? "text-primary" : "text-muted-foreground"} />
+                    <span
+                      className="w-1 h-1 rounded-full shrink-0"
+                      style={{
+                        background: domConfig.accentHex,
+                        opacity: isActive ? 1 : 0.5,
+                        boxShadow: isActive ? `0 0 8px ${domConfig.accentHex}` : 'none',
+                      }}
+                    />
+                    <Icon size={12} style={isActive ? { color: domConfig.accentHex } : undefined} className="text-muted-foreground" />
                     {domConfig.name}
                   </span>
-                  <ChevronRight size={10} className={`transition-transform ${isActive ? 'rotate-90 text-primary' : 'text-muted-foreground'}`} />
+                  <ChevronRight size={10} className={`transition-transform ${isActive ? 'rotate-90' : 'text-muted-foreground'}`} style={isActive ? { color: domConfig.accentHex } : undefined} />
                 </button>
 
                 {isActive && (
-                  <div className="pl-4 space-y-1 mt-0.5 border-l border-white/5 ml-3.5">
-                    {domConfig.simulations.map((sim: SubSimulation) => {
+                  <div className="pl-4 space-y-1 mt-0.5 ml-3.5" style={{ borderLeft: `1px solid ${domConfig.accentHex}26` }}>
+                    {domConfig.simulations.map((sim: ClientSimulation) => {
                       const isSimActive = activeSimId === sim.id;
                       return (
                         <button
@@ -1260,11 +1135,15 @@ export function SimulationRunner({ slug }: { slug: string }) {
                             setActiveSimId(sim.id);
                             setSidebarOpen(false); // Close drawer on selection
                           }}
-                          className={`w-full text-left px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                          className={`w-full text-left px-2 py-1 rounded text-[10px] font-medium transition-all ${
                             isSimActive 
-                              ? 'text-primary bg-primary/10 font-bold' 
+                              ? 'font-bold' 
                               : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
                           }`}
+                          style={isSimActive ? {
+                            color: domConfig.accentHex,
+                            backgroundColor: `${domConfig.accentHex}14`,
+                          } : undefined}
                         >
                           {sim.name}
                         </button>
@@ -1284,49 +1163,77 @@ export function SimulationRunner({ slug }: { slug: string }) {
               setSidebarOpen(false);
               setShowHistory(true);
             }}
-            className="w-full py-1.5 bg-white/5 border border-white/10 hover:bg-white/10 text-[10px] uppercase tracking-wider font-bold rounded-lg flex items-center justify-center gap-1 transition-colors"
+            className="w-full py-1.5 bg-white/5 border border-white/10 hover:bg-white/10 text-[10px] uppercase tracking-wider font-bold rounded-lg flex items-center justify-center gap-1 transition-colors group"
           >
-            <History size={10} /> History
+            <History size={10} className="text-muted-foreground group-hover:text-white transition-colors" /> History
           </button>
         </div>
       </div>
 
       {/* Calibration history modal */}
       {showHistory && (
-        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 rounded-2xl">
-          <div className="w-full max-w-sm bg-black/60 border border-white/10 rounded-2xl p-5 shadow-2xl space-y-3 backdrop-blur-md">
+        <div
+          className="absolute inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-6 rounded-2xl"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Calibration history"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setShowHistory(false);
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowHistory(false);
+          }}
+        >
+          <div className="w-full max-w-sm bg-black/70 border border-white/5 rounded-2xl p-4 shadow-2xl space-y-3 backdrop-blur-md">
             <div className="flex justify-between items-center border-b border-white/5 pb-2.5">
               <h3 className="text-[10px] font-black uppercase text-foreground tracking-widest flex items-center gap-1.5">
-                <Database size={12} className="text-primary" /> Calibration History
+                <span
+                  className="w-1 h-1 rounded-full"
+                  style={{
+                    background: activeDomainConfig?.accentHex || '#3b82f6',
+                    boxShadow: `0 0 6px ${activeDomainConfig?.accentHex || '#3b82f6'}`,
+                  }}
+                />
+                Calibration History
               </h3>
               <button 
                 onClick={() => setShowHistory(false)}
-                className="text-[10px] text-muted-foreground hover:text-foreground font-bold"
+                className="text-muted-foreground hover:text-white transition-colors"
+                aria-label="Close history"
               >
-                Close
+                <X size={14} />
               </button>
             </div>
 
             <div className="space-y-2 overflow-y-auto max-h-[220px] pr-1 scrollbar-none">
-              {historyRuns.length === 0 ? (
-                <div className="text-center py-6 text-[10px] font-mono text-muted-foreground">
+              {historyError ? (
+                <div className="text-center py-6 text-[10px] font-mono text-rose-300/80" role="alert">
+                  {historyError}
+                </div>
+              ) : historyRuns.length === 0 ? (
+                <div className="text-center py-6 text-[10px] font-mono text-muted-foreground/60">
                   No previous runs logged for this lab.
                 </div>
               ) : (
                 historyRuns.map((run) => (
-                  <div 
+                  <button 
                     key={run._id}
+                    type="button"
                     onClick={() => loadHistoryItem(run)}
-                    className="p-2.5 rounded-xl border border-white/5 bg-white/2 hover:bg-white/5 hover:border-primary/20 cursor-pointer transition-all flex justify-between items-center text-[10px] font-mono"
+                    className="w-full p-2.5 rounded-xl border border-white/5 bg-white/2 hover:bg-white/5 hover:border-white/15 cursor-pointer transition-all flex justify-between items-center text-[10px] font-mono group text-left"
                   >
                     <div>
                       <p className="font-bold text-foreground">{new Date(run.timestamp).toLocaleString()}</p>
-                      <p className="text-[9px] text-muted-foreground mt-0.5">
-                        Params: {Object.entries(run.parameters).map(([k, v]) => `${k}: ${(v as number).toFixed(1)}`).join(', ')}
+                      <p className="text-[9px] text-muted-foreground/60 mt-0.5">
+                        Params: {Object.entries(run.parameters || {}).map(([k, v]) => `${k}: ${formatParamValue(v)}`).join(', ')}
                       </p>
                     </div>
-                    <ChevronRight size={12} className="text-muted-foreground" />
-                  </div>
+                    <ChevronRight
+                      size={12}
+                      className="transition-transform group-hover:translate-x-0.5 shrink-0"
+                      style={{ color: activeDomainConfig?.accentHex || '#3b82f6' }}
+                    />
+                  </button>
                 ))
               )}
             </div>

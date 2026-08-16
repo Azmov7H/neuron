@@ -1,145 +1,33 @@
 /**
- * Simulation Domain Types
- * Centralized type definitions for simulation module
+ * Simulation Runner Types
+ * Engine-and-runner-local type definitions.
+ *
+ * `ScientificDomain` and `SimulationParameter` are NOT declared here — they
+ * live in the canonical definition `src/lib/simulation/registry.types.ts` and
+ * every consumer imports them from there directly.
  */
-
-import type { LucideIcon } from 'lucide-react';
 
 /**
- * Scientific domains supported by the simulation system
+ * State contract classification for a simulation run.
+ *
+ * - `dynamic`: the engine holds real measured/mutable scientific state that
+ *   advances over time (population counts, velocities, SIR compartments).
+ * - `parameterized_visualization`: the visualization is a parameter-driven
+ *   render; there is no measured scientific state, only presentation state.
+ * - `conceptual`: no 60 FPS canvas engine; the HUD renders a conceptual
+ *   parameter-driven visualization. No dynamic state exists.
  */
-export type ScientificDomain = 'physics' | 'biology' | 'anatomy' | 'mathematics' | 'quantum' | 'space';
-
-/**
- * Parameter specification for a configurable simulation parameter
- */
-export interface SimulationParameter {
-  key: string;
-  label: string;
-  min: number;
-  max: number;
-  step: number;
-}
-
-/**
- * Core simulation definition with executable logic and configuration
- */
-export interface Simulation {
-  id: string;
-  name: string;
-  desc: string;
-  equation: string;
-  defaultParams: Record<string, number>;
-  paramsList: SimulationParameter[];
-}
-
-/**
- * Domain configuration grouping related simulations
- */
-export interface SimulationDomain {
-  name: string;
-  icon: LucideIcon;
-  colorClass: string;
-  glowClass: string;
-  accentHex: string;
-  simulations: Simulation[];
-}
+export type SimulationStateType = 'dynamic' | 'parameterized_visualization' | 'conceptual';
 
 /**
  * Telemetry snapshot from the simulation engine
  */
 export interface TelemetrySnapshot {
+  /** Frame/step counter (1 per executed physics frame) */
   timeStep: number;
+  /** Physical simulation clock in seconds (frame-rate independent) */
+  simulationTime: number;
+  /** State contract classification of this simulation */
+  stateType: SimulationStateType;
   stateSnapshot: Record<string, unknown>;
-}
-
-/**
- * Historical simulation run record
- */
-export interface SimulationHistory {
-  _id: string;
-  timestamp: string;
-  parameters: Record<string, number>;
-  aiInterpretation: {
-    explanation: string;
-    keyInsights: string[];
-    concepts: string[];
-    recommendedActions: string[];
-  };
-}
-
-/**
- * Telemetry callback for engine state synchronization
- */
-export type TelemetrySyncCallback = (snap: TelemetrySnapshot) => void;
-
-/**
- * Engine lifecycle state
- */
-export enum EngineState {
-  Idle = 'idle',
-  Running = 'running',
-  Paused = 'paused',
-  Stopped = 'stopped',
-}
-
-/**
- * SIR model particle state
- */
-export type SIRParticleState = 'S' | 'I' | 'R';
-
-/**
- * SIR model particle for epidemiology simulations
- */
-export interface SIRParticle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  state: SIRParticleState;
-  timer: number;
-}
-
-/**
- * Generic particle entity for simulations
- */
-export interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-}
-
-/**
- * Settled bead for probability simulations
- */
-export interface BeadParticle extends Particle {
-  settled: boolean;
-  bin?: number;
-}
-
-/**
- * AI interpretation result for simulation analysis
- */
-export interface AIInterpretation {
-  explanation: string;
-  keyInsights: string[];
-  concepts: string[];
-  recommendedActions: string[];
-  metadata?: {
-    domain: string;
-    simulationType: string;
-    difficulty: 'beginner' | 'intermediate' | 'advanced';
-    aiModel: string;
-  };
-}
-
-/**
- * Configuration for a specific interactive simulation
- */
-export interface InteractiveSimulationConfig {
-  domain: ScientificDomain;
-  simulationId: string;
-  parameters: Record<string, number>;
-  stateSnapshot?: Record<string, unknown>;
 }

@@ -13,10 +13,10 @@ import { getAuthContext, withErrorHandling, requireAuth } from '@/middleware/aut
 import { ApiResponseHandler } from '@/lib/utils/response';
 import { logger } from '@/lib/logger';
 import { SparkService } from '@/modules/spark/spark.service';
+import { LLMProviderFactory } from '@/lib/ai/providers/provider.factory';
+import { config } from '@/config/env';
 import { AppError } from '@/types';
 
-const MODEL_NAME = process.env.OPENROUTER_MODEL || 'google/gemma-4-26b-a4b-it:free';
-const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const PRIMARY_TIMEOUT_MS = 5500; // 5.5 seconds threshold
 
 type SparkChatRequestBody = {
@@ -90,9 +90,10 @@ async function handler(request: NextRequest) {
   }
 
   const { llmMessages, retrievedChunks } = requestParams;
-  const apiKey = process.env.OPENROUTER_API_KEY || process.env.OPENAI_API_KEY || '';
+  const apiKey = config.ai.openRouterApiKey || config.ai.openaiApiKey;
 
   const encoder = new TextEncoder();
+  const activeProvider = LLMProviderFactory.getProvider();
 
   // Custom streaming response
   const stream = new ReadableStream({
@@ -160,7 +161,7 @@ async function handler(request: NextRequest) {
         return;
       }
 
-      // 2. OpenRouter live stream with AbortController for primary timeout
+      // 2. LLM provider stream with AbortController for primary timeout
       const abortController = new AbortController();
       const timeoutId = setTimeout(() => {
         abortController.abort();
@@ -168,34 +169,15 @@ async function handler(request: NextRequest) {
       }, PRIMARY_TIMEOUT_MS);
 
       try {
-        const response = await fetch(OPENROUTER_URL, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-            'HTTP-Referer': 'https://neuron-edu.vercel.app',
-            'X-Title': 'Neuron AI Education Platform'
-          },
-          body: JSON.stringify({
-            model: MODEL_NAME,
-            messages: llmMessages,
-            temperature: 0.7,
-            stream: true,
-          }),
-          signal: abortController.signal
+        const providerStream = await activeProvider.streamCompletion(llmMessages, {
+          temperature: 0.7,
+          signal: abortController.signal,
         });
 
         clearTimeout(timeoutId);
 
-        if (!response.ok) {
-          throw new Error(`OpenRouter returned status ${response.status}`);
-        }
-
-        const reader = response.body?.getReader();
+        const reader = providerStream.getReader();
         const decoder = new TextDecoder();
-        if (!reader) {
-          throw new Error('Response body has no reader');
-        }
 
         let buffer = '';
 
@@ -250,7 +232,7 @@ async function handler(request: NextRequest) {
           return;
         }
         // Connection or status failures: recover with fallback
-        await triggerLocalFallback(`OpenRouter connection error: ${error.message}`);
+        await triggerLocalFallback(`LLM provider connection error: ${error.message}`);
       }
     }
   });

@@ -3,14 +3,15 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FlaskConical } from "lucide-react";
-import { DOMAIN_STYLES, isInteractiveSim } from "./constants";
+import { DOMAIN_STYLES, isInteractiveSim, DOMAIN_ORDER } from "./constants";
 import { fetchSimulationConfig } from "./simulation-config-client";
+import type { ScientificDomain } from "@/lib/simulation/registry.types";
 
 interface ConceptualLab {
   id: string;
   name: string;
   desc: string;
-  domain: string;
+  domain: ScientificDomain;
 }
 
 export function ExperimentalLabs() {
@@ -23,13 +24,14 @@ export function ExperimentalLabs() {
         const config = await fetchSimulationConfig();
         if (!active || !config) return;
         const collected: ConceptualLab[] = [];
-        Object.entries(config).forEach(([domainKey, domainConfig]) => {
+        for (const domainKey of DOMAIN_ORDER) {
+          const domainConfig = config[domainKey];
           domainConfig.simulations.forEach((s) => {
             if (!isInteractiveSim(s.id)) {
               collected.push({ id: s.id, name: s.name, desc: s.desc ?? "", domain: domainKey });
             }
           });
-        });
+        }
         if (active) setLabs(collected);
       } catch {
         // Keep null → render skeletons.

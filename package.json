@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run"
   },
   "packageManager": "pnpm@10.15.0",
   "dependencies": {
@@ -49,9 +50,12 @@
     "@types/three": "^0.184.1",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.2.6",
+    "jsdom": "^30.0.1",
     "tailwindcss": "^4.3.3",
     "tailwindcss-animate": "^1.0.7",
-    "typescript": "^5.9.3"
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
   },
   "pnpm": {
     "overrides": {

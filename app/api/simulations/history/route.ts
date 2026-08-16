@@ -4,8 +4,8 @@ import { getAuthContext, withErrorHandling, requireAuth } from '@/middleware/aut
 import { ApiResponseHandler } from '@/lib/utils/response';
 import { logger } from '@/lib/logger';
 import { SimulationRun } from '@/database/models/simulation-run';
-import mongoose from 'mongoose';
 import crypto from 'crypto';
+import { parseHistoryLimit, buildHistoryQuery } from '@/lib/simulation/history-params';
 
 async function handler(request: NextRequest) {
   const auth = getAuthContext(request);
@@ -17,21 +17,17 @@ async function handler(request: NextRequest) {
 
   try {
     const searchParams = request.nextUrl.searchParams;
-    const domain = searchParams.get('domain');
-    const simulationId = searchParams.get('simulationId');
-    const limit = parseInt(searchParams.get('limit') || '15', 10);
+    // Client-supplied limits are always clamped into [1, 100] — an arbitrary
+    // value must never reach the Mongo .limit() call.
+    const limit = parseHistoryLimit(searchParams.get('limit'));
     const clientETag = request.headers.get('if-none-match');
 
-    const query: Record<string, unknown> = {
-      userId: new mongoose.Types.ObjectId(auth.userId)
-    };
-
-    if (domain) {
-      query.domain = domain;
-    }
-    if (simulationId) {
-      query.simulationId = simulationId;
-    }
+    // Ownership is enforced here: the userId filter always comes from the
+    // authenticated context, never from request parameters.
+    const query = buildHistoryQuery(auth.userId, {
+      domain: searchParams.get('domain'),
+      simulationId: searchParams.get('simulationId'),
+    });
 
     const history = await SimulationRun.find(query)
       .sort({ timestamp: -1 })

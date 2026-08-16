@@ -5,8 +5,38 @@
  * for all 17 interactive scientific simulations.
  */
 
-import type { TelemetrySnapshot } from "./simulation.types";
-import { TELEMETRY_SYNC_INTERVAL_MS } from "./engine-constants";
+import type { SimulationStateType, TelemetrySnapshot } from "./simulation.types";
+import {
+  AXON_PROGRESS_MAX_OFFSET,
+  AXON_SIGNAL_BASE_SPEED,
+  CANVAS_BG_COLOR,
+  DEFAULT_POPULATIONS,
+  ENGINE_TICKS_PER_SECOND,
+  ENGINE_TIMESTEP_MS,
+  GRAVITY_CONSTANT,
+  GRID_CELL_SIZE,
+  GRID_COLOR,
+  GRID_LINE_WIDTH,
+  MAX_DELTA_TIME_MS,
+  MIN_DELTA_TIME_MS,
+  MOTION_BOX_START_X,
+  MOTION_VELOCITY_DAMPING,
+  ORBIT_RENDER_SPEED,
+  TELEMETRY_SYNC_INTERVAL_MS,
+} from "./engine-constants";
+import { getSimulationStateType } from "./simulation-state";
+import { sanitizeSnapshot } from "@/lib/simulation/snapshot-sanitize";
+
+/**
+ * Kepler orbital angular velocity for the orbit simulation (RF-2).
+ * ω = ORBIT_RENDER_SPEED · √(M/a³) — normalised rendering constant (see
+ * engine-constants.ts) calibrated so the default orbit (a = 10, M = 120)
+ * keeps the visual pacing it had before the fix. Visual behaviour only;
+ * telemetry is unchanged.
+ */
+export function computeOrbitAngularVelocity(semiMajorAxis: number, starMass: number): number {
+  return Math.sqrt(starMass / Math.pow(semiMajorAxis, 3)) * ORBIT_RENDER_SPEED;
+}
 
 export class SimulationEngine {
   public canvas: HTMLCanvasElement;
@@ -16,7 +46,27 @@ export class SimulationEngine {
   public parameters: Record<string, number> = {};
   public stateSnapshot: Record<string, unknown> = {};
   public isRunning: boolean = true;
-  public timeStep: number = 0;
+  /** State contract classification (S-07). */
+  public readonly stateType: SimulationStateType;
+
+  // ── Delta-time timing model (S-03) ────────────────────────────────────────
+  // `frameCount`/`timeStep` count executed physics frames; `simulationTime`
+  // is the physical clock in seconds built from clamped per-frame deltas.
+  // `timeStep` is retained as an alias of `frameCount` for callers that only
+  // need the frame counter.
+  public frameCount: number = 0;
+  public simulationTime: number = 0;
+  /** Clamped frame delta in ms of the last executed physics step. */
+  public deltaTime: number = 0;
+  /** Timestamp (ms) of the last rendered frame. */
+  public renderTimestamp: number = 0;
+  /** Simulation clock value (s) at the moment of the last telemetry sync. */
+  public telemetrySyncTime: number = 0;
+  /** Wall-clock (ms) baseline of the last executed frame; null = no baseline. */
+  public previousTimestamp: number | null = null;
+  public get timeStep(): number {
+    return this.frameCount;
+  }
 
   // High-DPI logical dimensions (separate from canvas pixel buffer)
   private logicalW: number = 760;
@@ -27,6 +77,34 @@ export class SimulationEngine {
   private lastSyncTime: number = 0;
   private backgroundCanvas: HTMLCanvasElement | null = null;
 
+  /**
+   * Recursively strips non-finite numbers from a telemetry snapshot so NaN or
+   * Infinity can never reach React state or the AI/assessment pipeline (P3
+   * runtime audit, EDGE-06). Non-number values (strings, contracts, nested
+   * objects) pass through untouched. Implementation lives in the shared lib
+   * module so the server-side interpret ingestion can use the exact same
+   * boundary sanitizer (ASSESS-02).
+   */
+  private static sanitizeSnapshot(snapshot: Record<string, unknown>): Record<string, unknown> {
+    return sanitizeSnapshot(snapshot);
+  }
+
+  // Frame-rate independent spawn accumulator (probability board)
+  private spawnAccum: number = 0;
+
+  // S-13: precomputed deterministic graph edge pairs — the edge set depends
+  // only on (nodesCount, connectionProbability), not on per-frame time.
+  private graphEdges: Array<[number, number]> = [];
+
+  // S-13: cached bacterial colony render — the dot layout is a pure function
+  // of the integer population, so it is rasterized once per change.
+  private colonyCache:
+    | { popFloor: number; w: number; h: number; canvas: HTMLCanvasElement | null }
+    | null = null;
+
+  // S-13: cached black hole accretion gradient — depends only on mass.
+  private diskGradientCache: { mass: number; gradient: CanvasGradient | null } | null = null;
+
   // Particle databases and mathematical coordinates (Survives React re-renders)
   private sirParticles: Array<{ x: number; y: number; vx: number; vy: number; state: 'S' | 'I' | 'R'; timer: number }> = [];
   private wbcList: Array<{ x: number; y: number; vx: number; vy: number }> = [];
@@ -36,7 +114,7 @@ export class SimulationEngine {
   private nodesList: Array<{ x: number; y: number; vx: number; vy: number }> = [];
   
   // Custom positions
-  private boxX: number = 60;
+  private boxX: number = MOTION_BOX_START_X;
   private boxVel: number = 0;
   private axonProgress: number = 0;
 
@@ -53,6 +131,7 @@ export class SimulationEngine {
     this.simId = simId;
     this.parameters = { ...params };
     this.onStateSync = onStateSync;
+    this.stateType = getSimulationStateType(simId);
 
     // Initialize logical dimensions from the CSS-rendered container size
     this.logicalW = canvas.clientWidth || 760;
@@ -92,12 +171,12 @@ export class SimulationEngine {
       const bgCtx = bgCanvas.getContext('2d', { alpha: false })!;
       bgCtx.save();
       bgCtx.scale(dpr, dpr);
-      bgCtx.fillStyle = '#030305';
+      bgCtx.fillStyle = CANVAS_BG_COLOR;
       bgCtx.fillRect(0, 0, this.logicalW, this.logicalH);
 
-      bgCtx.strokeStyle = 'rgba(255, 255, 255, 0.012)';
-      bgCtx.lineWidth = 1;
-      const gridSize = 16;
+      bgCtx.strokeStyle = GRID_COLOR;
+      bgCtx.lineWidth = GRID_LINE_WIDTH;
+      const gridSize = GRID_CELL_SIZE;
       for (let x = 0; x < this.logicalW; x += gridSize) {
         bgCtx.beginPath();
         bgCtx.moveTo(x, 0);
@@ -126,8 +205,8 @@ export class SimulationEngine {
 
   // SIM-BUG-007: Respect externally-set isRunning state instead of force-overriding to true
   public start() {
-    if (!this.animId) {
-      this.tick(0);
+    if (!this.animId && this.isRunning) {
+      this.frame(0);
     }
   }
 
@@ -139,11 +218,61 @@ export class SimulationEngine {
     }
   }
 
+  // S-04: Pause must halt the animation loop so no physics, render, or
+  // telemetry work happens while paused. The timestamp baseline is dropped
+  // so resume cannot absorb the paused wall-clock duration.
+  public pause() {
+    this.stop();
+    this.previousTimestamp = null;
+  }
+
+  // S-04: Resume restarts exactly one loop. The first resumed frame uses the
+  // nominal timestep (safe first-frame delta), so a long pause never produces
+  // a giant physics step.
+  public resume() {
+    this.isRunning = true;
+    this.previousTimestamp = null;
+    if (!this.animId) {
+      this.animId = requestAnimationFrame(this.frame);
+    }
+  }
+
+  /**
+   * Executes a single synchronous frame step (test hook and deterministic
+   * driver). No-ops while paused — paused engines never advance time, mutate
+   * state, or emit telemetry (S-04).
+   */
+  public advanceFrame(timestampMs: number) {
+    if (!this.isRunning) return;
+    // RC-07: if the live loop is currently scheduled, take over its handle so
+    // an external driver cannot double-schedule frames (frame() re-arms one
+    // rAF below), which would silently double physics speed and telemetry.
+    if (this.animId !== null) {
+      cancelAnimationFrame(this.animId);
+      this.animId = null;
+    }
+    this.frame(timestampMs);
+  }
+
   public resetTime() {
-    this.timeStep = 0;
-    this.boxX = 60;
+    // Reset timing model to the clean initial state (S-03 reset contract):
+    // zero clock, zero frames, no baseline, and a safe first-frame delta.
+    this.frameCount = 0;
+    this.simulationTime = 0;
+    this.deltaTime = 0;
+    this.renderTimestamp = 0;
+    this.telemetrySyncTime = 0;
+    this.lastSyncTime = 0;
+    this.previousTimestamp = null;
+    this.spawnAccum = 0;
+
+    this.boxX = MOTION_BOX_START_X;
     this.boxVel = 0;
     this.axonProgress = 0;
+    // Reset simulation-specific state: simulations that derive their next
+    // frame from stateSnapshot (e.g. bacteria population) must restart from
+    // their clean initial value instead of continuing the pre-reset run.
+    this.stateSnapshot = {};
     this.initSubSimData();
   }
 
@@ -152,6 +281,10 @@ export class SimulationEngine {
       cancelAnimationFrame(this.animId);
       this.animId = null;
     }
+    // Drop cached render artifacts tied to this engine lifetime.
+    this.colonyCache = null;
+    this.diskGradientCache = null;
+    this.graphEdges = [];
   }
 
   public updateParameter(key: string, value: number) {
@@ -162,6 +295,9 @@ export class SimulationEngine {
       this.initSubSimData();
     } else if (this.simId === 'graph' && key === 'nodesCount') {
       this.initSubSimData();
+    } else if (this.simId === 'graph' && key === 'connectionProbability') {
+      // Rebuild the deterministic edge set when the link probability changes.
+      this.rebuildGraphEdges();
     } else if (this.simId === 'probability' && key === 'beadsCount') {
       this.beadsList = [];
       this.bins.fill(0);
@@ -175,8 +311,8 @@ export class SimulationEngine {
     if (this.simId === 'immune') {
       this.wbcList = [];
       this.pathogenList = [];
-      const wc = this.parameters.wbcCount || 15;
-      const pc = this.parameters.pathogenCount || 40;
+      const wc = this.parameters.wbcCount || DEFAULT_POPULATIONS.WBC_COUNT;
+      const pc = this.parameters.pathogenCount || DEFAULT_POPULATIONS.PATHOGEN_COUNT;
 
       for (let i = 0; i < wc; i++) {
         this.wbcList.push({
@@ -198,7 +334,7 @@ export class SimulationEngine {
       }
     } else if (this.simId === 'virus') {
       // SIM-BUG-005: Respect populationSize parameter for configurable particle density
-      const pop = Math.round(this.parameters.populationSize ?? 120);
+      const pop = Math.round(this.parameters.populationSize ?? DEFAULT_POPULATIONS.SIR_PARTICLES);
       this.sirParticles = [];
       for (let i = 0; i < pop; i++) {
         this.sirParticles.push({
@@ -215,6 +351,7 @@ export class SimulationEngine {
       this.bins.fill(0);
     } else if (this.simId === 'graph') {
       this.nodesList = [];
+      this.graphEdges = [];
       const nodes = this.parameters.nodesCount || 30;
       const cx = w / 2;
       const cy = h / 2;
@@ -226,34 +363,117 @@ export class SimulationEngine {
           vy: 0
         });
       }
+      this.rebuildGraphEdges();
     }
   }
 
-  // Unified RequestAnimationFrame loop
-  private tick = (timestamp: number) => {
-    if (this.isRunning) {
-      this.timeStep++;
-      
-      // Perform math simulation computations
-      this.updatePhysics();
+  /**
+   * S-13: The Erdős-Rényi edge set is purely deterministic in (n, p). It is
+   * precomputed whenever nodes/connectivity change, so per-frame rendering no
+   * longer re-hashes every O(n²) pair with trig math.
+   */
+  private rebuildGraphEdges() {
+    const nodes = Math.round(this.parameters.nodesCount ?? DEFAULT_POPULATIONS.NETWORK_NODES);
+    const p = this.parameters.connectionProbability ?? 0.15;
+    const edges: Array<[number, number]> = [];
+    for (let i = 0; i < nodes; i++) {
+      for (let j = i + 1; j < nodes; j++) {
+        const seedVal = Math.sin(i * 12.98 + j * 78.2) * 43758.54;
+        const randVal = seedVal - Math.floor(seedVal);
+        if (randVal < p) edges.push([i, j]);
+      }
     }
-    
+    this.graphEdges = edges;
+  }
+
+  /**
+   * S-13: Rasterizes the bacterial colony dots onto an offscreen (transparent)
+   * canvas. Keyed by integer population and logical canvas size so per-frame
+   * rendering is a single drawImage. Lifecycle-safe: the canvas is owned by
+   * this cache, replaced on invalidation, and dropped in destroy().
+   */
+  private renderColonyCache(popFloor: number, dishX: number, dishY: number, dishR: number, w: number, h: number): {
+    popFloor: number;
+    w: number;
+    h: number;
+    canvas: HTMLCanvasElement | null;
+  } {
+    const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1;
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    const cctx = canvas.getContext('2d');
+    if (!cctx) return { popFloor, w, h, canvas: null };
+
+    cctx.save();
+    cctx.scale(dpr, dpr);
+    cctx.fillStyle = "rgba(52, 211, 153, 0.65)";
+    for (let i = 0; i < popFloor; i++) {
+      const angle = (i * 137.5) * (Math.PI / 180);
+      const rFactor = Math.sqrt(i) * 7.5;
+      if (rFactor < dishR - 10) {
+        const bx = dishX + Math.cos(angle) * rFactor;
+        const by = dishY + Math.sin(angle) * rFactor;
+        cctx.beginPath();
+        cctx.ellipse(bx, by, 5, 2.5, angle, 0, Math.PI * 2);
+        cctx.fill();
+      }
+    }
+    cctx.restore();
+    return { popFloor, w, h, canvas };
+  }
+
+  // Unified RequestAnimationFrame loop
+  // S-03/S-04: physics, render, and telemetry are driven by clamped frame
+  // deltas; the loop suspends completely while paused.
+  private frame = (timestamp: number) => {
+    if (!this.isRunning) {
+      this.stop();
+      return;
+    }
+
+    this.frameCount++;
+    this.renderTimestamp = timestamp;
+
+    // First-frame normalization: with no baseline, consume exactly one
+    // nominal engine timestep (identical to a steady 60Hz frame), so a fresh
+    // frame or a resume never advances physics by a wall-clock accident.
+    const rawDelta = this.previousTimestamp === null
+      ? ENGINE_TIMESTEP_MS
+      : Math.max(0, timestamp - this.previousTimestamp);
+    this.deltaTime = Math.min(MAX_DELTA_TIME_MS, Math.max(MIN_DELTA_TIME_MS, rawDelta));
+    this.simulationTime += this.deltaTime / 1000;
+    this.previousTimestamp = timestamp;
+
+    // Perform math simulation computations
+    this.updatePhysics();
+
     // Core render execution
     this.draw();
 
     // Throttled UI Sync Callback — rate controlled by TELEMETRY_SYNC_INTERVAL_MS
     if (timestamp - this.lastSyncTime > TELEMETRY_SYNC_INTERVAL_MS) {
+      this.telemetrySyncTime = this.simulationTime;
       this.onStateSync({
-        timeStep: this.timeStep,
-        stateSnapshot: { ...this.stateSnapshot }
+        timeStep: this.frameCount,
+        simulationTime: this.simulationTime,
+        stateType: this.stateType,
+        // P3 runtime audit (EDGE-06): never let a non-finite value reach
+        // React or the AI pipeline — drop stale/corrupt numbers instead of
+        // propagating NaN/Infinity (which JSON would silently turn into null).
+        stateSnapshot: SimulationEngine.sanitizeSnapshot({ ...this.stateSnapshot })
       });
       this.lastSyncTime = timestamp;
     }
 
-    this.animId = requestAnimationFrame(this.tick);
+    this.animId = requestAnimationFrame(this.frame);
   }
 
   private updatePhysics() {
+    // Engine time scale: 1.0 = exactly one 60Hz frame. Physics constants stay
+    // calibrated per "1/60 s engine tick" and are scaled by the clamped delta,
+    // making evolution frame-rate independent (S-03).
+    const dt = (this.deltaTime / 1000) * ENGINE_TICKS_PER_SECOND;
     const w = this.logicalW;
     const h = this.logicalH;
 
@@ -262,16 +482,23 @@ export class SimulationEngine {
         const force = this.parameters.force ?? 15;
         const mass = this.parameters.mass ?? 5;
         const friction = this.parameters.friction ?? 0.2;
-        const F_friction = friction * mass * 9.8;
-        const F_net = Math.max(0, force - F_friction);
-        const acc = F_net / mass;
-
-        this.boxX += this.boxVel;
-        this.boxVel += acc * 0.03;
-
-        if (force === 0 && this.boxVel > 0) {
-          this.boxVel = Math.max(0, this.boxVel - (F_friction / mass) * 0.03);
+        const F_friction = friction * mass * GRAVITY_CONSTANT;
+        // RC-04: friction continuously opposes motion. With an applied force
+        // below the static-friction threshold a moving box must decelerate to
+        // rest (not glide forever), while a stationary box under a
+        // sub-threshold force stays still — no spontaneous negative motion.
+        let acc: number;
+        if (this.boxVel > 0) {
+          acc = (force - F_friction) / mass;
+        } else if (this.boxVel < 0) {
+          acc = (force + F_friction) / mass;
+        } else {
+          acc = force > F_friction ? (force - F_friction) / mass : 0;
         }
+
+        this.boxX += this.boxVel * dt;
+        this.boxVel += acc * MOTION_VELOCITY_DAMPING * dt;
+        if (this.boxVel < 0) this.boxVel = 0;
 
         const blockW = 50 + mass * 1.5;
         if (this.boxX > w) {
@@ -280,7 +507,10 @@ export class SimulationEngine {
 
         this.stateSnapshot = {
           acceleration: acc,
-          velocity: this.boxVel * 4,
+          // MEAS-04: the reported velocity is the box's actual velocity (the
+          // same scale that drives position), so telemetry and the drawn
+          // motion can never diverge.
+          velocity: this.boxVel,
           frictionalForce: F_friction
         };
         break;
@@ -293,7 +523,10 @@ export class SimulationEngine {
         const capacity = nutrient * 40;
 
         const currentPop = (this.stateSnapshot.population as number | undefined) ?? 5;
-        const nextPop = Math.min(capacity, currentPop + (growthConstant * 0.05 * currentPop * (1 - currentPop / capacity)));
+        const nextPop = Math.min(
+          capacity,
+          currentPop + growthConstant * 0.05 * currentPop * (1 - currentPop / capacity) * dt
+        );
         
         this.stateSnapshot = {
           population: nextPop,
@@ -316,15 +549,15 @@ export class SimulationEngine {
         let susceptible = 0;
 
         this.sirParticles.forEach((p) => {
-          p.x += p.vx;
-          p.y += p.vy;
+          p.x += p.vx * dt;
+          p.y += p.vy * dt;
 
           if (p.x < bx || p.x > bx + boxW) { p.vx *= -1; p.x = Math.max(bx, Math.min(bx + boxW, p.x)); }
           if (p.y < by || p.y > by + boxH) { p.vy *= -1; p.y = Math.max(by, Math.min(by + boxH, p.y)); }
 
           if (p.state === 'I') {
             infected++;
-            p.timer++;
+            p.timer += dt;
 
             if (p.timer > (1 / rec) * 12) {
               p.state = 'R';
@@ -333,7 +566,7 @@ export class SimulationEngine {
             this.sirParticles.forEach((other) => {
               if (other.state === 'S') {
                 const distSq = Math.pow(p.x - other.x, 2) + Math.pow(p.y - other.y, 2);
-                if (distSq < 80 && Math.random() < trans * 0.04) {
+                if (distSq < 80 && Math.random() < Math.min(1, trans * 0.04 * dt)) {
                   other.state = 'I';
                   other.timer = 0;
                 }
@@ -362,8 +595,8 @@ export class SimulationEngine {
           if (!pat.active) return;
           pathLeft++;
 
-          pat.x += pat.vx;
-          pat.y += pat.vy;
+          pat.x += pat.vx * dt;
+          pat.y += pat.vy * dt;
 
           if (pat.x < 15 || pat.x > w - 15) pat.vx *= -1;
           if (pat.y < 15 || pat.y > h - 15) pat.vy *= -1;
@@ -387,12 +620,14 @@ export class SimulationEngine {
             const dy = target.y - wbc.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist > 0) {
-              wbc.vx = (wbc.vx + (dx / dist) * 0.15) * 0.95;
-              wbc.vy = (wbc.vy + (dy / dist) * 0.15) * 0.95;
+              // Steering blend decay is shaped as pow(bias, dt) so the
+              // convergence rate is frame-rate independent.
+              wbc.vx = (wbc.vx + (dx / dist) * 0.15 * dt) * Math.pow(0.95, dt);
+              wbc.vy = (wbc.vy + (dy / dist) * 0.15 * dt) * Math.pow(0.95, dt);
             }
 
-            wbc.x += wbc.vx;
-            wbc.y += wbc.vy;
+            wbc.x += wbc.vx * dt;
+            wbc.y += wbc.vy * dt;
 
             if (dist < 10) {
               target.active = false;
@@ -408,28 +643,34 @@ export class SimulationEngine {
       }
 
       case 'probability': {
-        const N = this.parameters.beadsCount ?? 200;
+        const N = this.parameters.beadsCount ?? DEFAULT_POPULATIONS.GALTON_BEADS;
         const cx = w / 2;
         const startY = 70;
         const spacing = 18;
         const rows = 8;
 
-        if (this.timeStep % 8 === 0 && this.beadsList.length < N) {
-          this.beadsList.push({
-            x: cx + (Math.random() - 0.5) * 4,
-            y: startY - 20,
-            vx: 0,
-            vy: 1.5,
-            settled: false
-          });
+        // Spawn one bead per 8 engine ticks (accumulator makes the drop rate
+        // frame-rate independent instead of gating on the raw frame counter).
+        if (this.beadsList.length < N) {
+          this.spawnAccum += dt;
+          while (this.spawnAccum >= 8 && this.beadsList.length < N) {
+            this.spawnAccum -= 8;
+            this.beadsList.push({
+              x: cx + (Math.random() - 0.5) * 4,
+              y: startY - 20,
+              vx: 0,
+              vy: 1.5,
+              settled: false
+            });
+          }
         }
 
         this.beadsList.forEach((b) => {
           if (b.settled) return;
 
-          b.y += b.vy;
-          b.x += b.vx;
-          b.vx *= 0.95;
+          b.y += b.vy * dt;
+          b.x += b.vx * dt;
+          b.vx *= Math.pow(0.95, dt);
 
           // peg row collisions
           for (let r = 0; r < rows; r++) {
@@ -465,7 +706,7 @@ export class SimulationEngine {
 
       case 'graph': {
         // SIM-BUG-003: O(n²/2) Symmetric Repulsion Forces — halves distance calculations per frame
-        const nodeCount = this.parameters.nodesCount ?? 30;
+        const nodeCount = this.parameters.nodesCount ?? DEFAULT_POPULATIONS.NETWORK_NODES;
         const cx = w / 2;
         const cy = h / 2;
 
@@ -483,8 +724,8 @@ export class SimulationEngine {
 
             if (dist < 100) {
               // Apply Newton's 3rd Law — equal and opposite — one sqrt per pair
-              const fx = (dx / dist) * (30 / dist);
-              const fy = (dy / dist) * (30 / dist);
+              const fx = (dx / dist) * (30 / dist) * dt;
+              const fy = (dy / dist) * (30 / dist) * dt;
               n1.vx += fx;
               n1.vy += fy;
               n2.vx -= fx;
@@ -495,13 +736,38 @@ export class SimulationEngine {
           // Gravity towards center and velocity integration
           const dcx = cx - n1.x;
           const dcy = cy - n1.y;
-          n1.vx += dcx * 0.015;
-          n1.vy += dcy * 0.015;
+          n1.vx += dcx * 0.015 * dt;
+          n1.vy += dcy * 0.015 * dt;
 
-          n1.x += n1.vx;
-          n1.y += n1.vy;
-          n1.vx *= 0.85;
-          n1.vy *= 0.85;
+          n1.x += n1.vx * dt;
+          n1.y += n1.vy * dt;
+          n1.vx *= Math.pow(0.85, dt);
+          n1.vy *= Math.pow(0.85, dt);
+        }
+
+        // Real measured layout metrics (S-07): computed live from the node
+        // database each physics step — no derived fake "science".
+        let averageSpeed = 0;
+        const activeNodes = Math.min(nodeCount, this.nodesList.length);
+        for (let i = 0; i < activeNodes; i++) {
+          averageSpeed += Math.hypot(this.nodesList[i].vx, this.nodesList[i].vy);
+        }
+        averageSpeed /= Math.max(1, activeNodes);
+        this.stateSnapshot = {
+          nodeCount: activeNodes,
+          averageSpeed
+        };
+        break;
+      }
+
+      default: {
+        // S-07 state contract: parameterized visualizations carry no measured
+        // scientific state. The snapshot communicates the render clock, and
+        // `stateType` tells assessment to treat everything as presentation.
+        if (this.stateType === 'parameterized_visualization') {
+          this.stateSnapshot = {
+            visualizationState: { animationPhase: this.simulationTime }
+          };
         }
         break;
       }
@@ -516,7 +782,10 @@ export class SimulationEngine {
     const ctx = this.ctx;
     const w = this.logicalW;  // Logical width (CSS pixels)
     const h = this.logicalH;  // Logical height (CSS pixels)
-    const t = this.timeStep;
+    // S-03: the render master clock is the physical simulation clock (in
+    // 60Hz-equivalent ticks), so animation speed no longer depends on the
+    // display refresh rate.
+    const t = this.simulationTime * ENGINE_TICKS_PER_SECOND;
 
     // Scale context so all draw calls use logical pixel coordinates
     ctx.save();
@@ -691,17 +960,16 @@ export class SimulationEngine {
         ctx.arc(dishX, dishY, dishR, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.fillStyle = "rgba(52, 211, 153, 0.65)";
-        for (let i = 0; i < Math.floor(currentPop); i++) {
-          const angle = (i * 137.5) * (Math.PI / 180);
-          const rFactor = Math.sqrt(i) * 7.5;
-          if (rFactor < dishR - 10) {
-            const bx = dishX + Math.cos(angle) * rFactor;
-            const by = dishY + Math.sin(angle) * rFactor;
-            ctx.beginPath();
-            ctx.ellipse(bx, by, 5, 2.5, angle, 0, Math.PI * 2);
-            ctx.fill();
-          }
+        // S-13: the colony dot layout is a pure deterministic function of
+        // floor(population) and the dish geometry — rasterize it once per
+        // population change instead of issuing an ellipse path per bacterium
+        // every frame.
+        const popFloor = Math.floor(currentPop);
+        if (!this.colonyCache || this.colonyCache.popFloor !== popFloor || this.colonyCache.w !== w || this.colonyCache.h !== h) {
+          this.colonyCache = this.renderColonyCache(popFloor, dishX, dishY, dishR, w, h);
+        }
+        if (this.colonyCache?.canvas) {
+          ctx.drawImage(this.colonyCache.canvas, 0, 0, w, h);
         }
         break;
       }
@@ -815,8 +1083,12 @@ export class SimulationEngine {
           ctx.strokeRect(sx + i * segW + 6, ny - 9, segW - 12, 18);
         }
 
-        const speed = 2.0 * myelin;
-        this.axonProgress = (this.axonProgress + speed) % (ex - sx + 50);
+        const speed = AXON_SIGNAL_BASE_SPEED * myelin;
+        // S-03: advance the pulse by the delta-scaled tick count so signal
+        // conduction speed is frame-rate independent.
+        this.axonProgress =
+          (this.axonProgress + speed * ((this.deltaTime / 1000) * ENGINE_TICKS_PER_SECOND)) %
+          (ex - sx + AXON_PROGRESS_MAX_OFFSET);
         const signalX = sx + this.axonProgress;
 
         if (signalX < ex) {
@@ -936,22 +1208,18 @@ export class SimulationEngine {
       }
 
       case 'graph': {
-        const nodes = this.parameters.nodesCount ?? 30;
-        const p = this.parameters.connectionProbability ?? 0.15;
-        
         ctx.strokeStyle = "rgba(251, 191, 36, 0.12)";
         ctx.lineWidth = 1;
-        for (let i = 0; i < nodes; i++) {
-          for (let j = i + 1; j < nodes; j++) {
-            const seedVal = Math.sin(i * 12.98 + j * 78.2) * 43758.54;
-            const randVal = seedVal - Math.floor(seedVal);
-            if (randVal < p && this.nodesList[i] && this.nodesList[j]) {
-              ctx.beginPath();
-              ctx.moveTo(this.nodesList[i].x, this.nodesList[i].y);
-              ctx.lineTo(this.nodesList[j].x, this.nodesList[j].y);
-              ctx.stroke();
-            }
-          }
+        // S-13: iterate the precomputed deterministic edge list instead of
+        // re-hashing O(n²) trig per frame.
+        for (const [i, j] of this.graphEdges) {
+          const n1 = this.nodesList[i];
+          const n2 = this.nodesList[j];
+          if (!n1 || !n2) continue;
+          ctx.beginPath();
+          ctx.moveTo(n1.x, n1.y);
+          ctx.lineTo(n2.x, n2.y);
+          ctx.stroke();
         }
 
         this.nodesList.forEach((n) => {
@@ -1040,7 +1308,7 @@ export class SimulationEngine {
         ctx.ellipse(cx, cy, ra, rb, 0, 0, Math.PI * 2);
         ctx.stroke();
 
-        const theta = t * (Math.sqrt(sm) * 0.0018);
+        const theta = t * computeOrbitAngularVelocity(a, sm);
         const px = cx + Math.cos(theta) * ra;
         const py = cy + Math.sin(theta) * rb;
 
@@ -1053,15 +1321,22 @@ export class SimulationEngine {
 
       case 'blackhole': {
         const mass = this.parameters.blackholeMass ?? 10;
-        const dist = this.parameters.probeDistance ?? 22;
+        const dist = this.parameters.probeDistance ?? 45;
         // SIM-BUG-006: Schwarzschild radius multiplier aligned with backend (2.95 km/M☉ proxy)
         const rs = mass * 2.95;
         const cx = w / 2;
         const cy = h / 2;
 
-        const disk = ctx.createRadialGradient(cx, cy, rs, cx, cy, rs * 2.2);
-        disk.addColorStop(0, 'rgba(245,158,11,0.75)');
-        disk.addColorStop(1, 'rgba(0,0,0,0)');
+        // S-13: the accretion gradient depends only on mass (rs) and center —
+        // create it once and reuse it until the mass parameter changes.
+        if (!this.diskGradientCache || this.diskGradientCache.mass !== mass) {
+          const disk = ctx.createRadialGradient(cx, cy, rs, cx, cy, rs * 2.2);
+          disk.addColorStop(0, 'rgba(245,158,11,0.75)');
+          disk.addColorStop(1, 'rgba(0,0,0,0)');
+          this.diskGradientCache = { mass, gradient: disk };
+        }
+        const disk = this.diskGradientCache && this.diskGradientCache.gradient;
+        if (!disk) break;
         ctx.fillStyle = disk;
         ctx.beginPath();
         ctx.arc(cx, cy, rs * 2.2, 0, Math.PI * 2);
@@ -1101,70 +1376,6 @@ export class SimulationEngine {
         ctx.arc(cx, cy, size, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
-        break;
-      }
-
-      default: {
-        // ====================================================================
-        // DYNAMIC SCIENTIFIC TELEMETRY GRAPHICS (FALLBACK FOR 31 NEW SIMULATIONS)
-        // ====================================================================
-        const cx = w / 2;
-        const cy = h / 2;
-
-        // Vector grid axes
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(40, cy);
-        ctx.lineTo(w - 40, cy);
-        ctx.moveTo(cx, 40);
-        ctx.lineTo(cx, h - 40);
-        ctx.stroke();
-
-        // Color theme mapping dynamically matching the domain slug
-        const domainAccentColors: Record<string, string> = {
-          physics: "#3b82f6",
-          biology: "#10b981",
-          anatomy: "#f43f5e",
-          mathematics: "#fbbf24",
-          quantum: "#c084fc",
-          space: "#22d3ee"
-        };
-        const color = domainAccentColors[this.domain] || "#3b82f6";
-
-        // Read active parameters to drive wave synthesis
-        const paramKeys = Object.keys(this.parameters);
-        const primaryVal = paramKeys.length > 0 ? this.parameters[paramKeys[0]] : 5;
-        const secondaryVal = paramKeys.length > 1 ? this.parameters[paramKeys[1]] : 3;
-
-        // Render beautiful glowing trigonometric lissajous pathway
-        ctx.strokeStyle = color;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 10;
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-
-        for (let sx = 40; sx <= w - 40; sx += 2) {
-          const mathX = (sx - cx) / 25;
-          const mathY = Math.sin(mathX * (primaryVal * 0.3) + t * 0.05) * Math.cos(mathX * 0.15) * (secondaryVal * 8);
-          const sy = cy - mathY;
-          
-          if (sx === 40) ctx.moveTo(sx, sy);
-          else ctx.lineTo(sx, sy);
-        }
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        // Orbiter charge tracking the wave dynamically
-        const pulseX = cx + Math.sin(t * 0.015) * (w / 2 - 80);
-        const mathX = (pulseX - cx) / 25;
-        const mathY = Math.sin(mathX * (primaryVal * 0.3) + t * 0.05) * Math.cos(mathX * 0.15) * (secondaryVal * 8);
-        const pulseY = cy - mathY;
-
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(pulseX, pulseY, 5.5, 0, Math.PI * 2);
-        ctx.fill();
         break;
       }
     }

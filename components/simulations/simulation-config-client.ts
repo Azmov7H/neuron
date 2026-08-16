@@ -1,21 +1,20 @@
-export type SimulationDomainConfig = {
-  domainKey: string;
-  name: string;
-  simulations: Array<{
-    id: string;
-    name: string;
-    desc?: string;
-    defaultParams?: Record<string, number>;
-    paramsList?: Array<{ key: string; label: string; min: number; max: number; step: number }>;
-  }>;
-  colorClass?: string;
-  glowClass?: string;
-  accentHex?: string;
-};
+/**
+ * Simulation Config Client Cache
+ * Fetches `/api/simulations/config` once per page lifetime and caches the
+ * promise. The API response type is the exact same `SimulationDomainConfig`
+ * used by the server builder (`src/lib/simulation/config-payload.ts`), so
+ * TypeScript proves API/client compatibility — no casts between divergent
+ * local contracts.
+ */
 
-let configPromise: Promise<Record<string, SimulationDomainConfig> | null> | null = null;
+import type { SimulationDomainConfig } from '@/lib/simulation/config-payload';
+import type { ScientificDomain } from '@/lib/simulation/registry.types';
 
-export async function fetchSimulationConfig(): Promise<Record<string, SimulationDomainConfig> | null> {
+export type { SimulationDomainConfig };
+
+let configPromise: Promise<Record<ScientificDomain, SimulationDomainConfig> | null> | null = null;
+
+export async function fetchSimulationConfig(): Promise<Record<ScientificDomain, SimulationDomainConfig> | null> {
   if (configPromise) return configPromise;
 
   configPromise = fetch("/api/simulations/config")
@@ -28,10 +27,13 @@ export async function fetchSimulationConfig(): Promise<Record<string, Simulation
         throw new Error("Simulation config response invalid");
       }
 
-      return body.data.reduce((acc: Record<string, SimulationDomainConfig>, entry: SimulationDomainConfig) => {
+      // Untrusted fetch boundary: the JSON payload is narrowed to the
+      // shared contract here, once — every downstream consumer is typed.
+      const data = body.data as SimulationDomainConfig[];
+      return data.reduce((acc, entry) => {
         acc[entry.domainKey] = entry;
         return acc;
-      }, {});
+      }, {} as Record<ScientificDomain, SimulationDomainConfig>);
     })
     .catch((error: Error) => {
       configPromise = null;
