@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check:boundaries": "node scripts/check-backend-imports.mjs",
+    "check:boundaries:update": "node scripts/check-backend-imports.mjs --update"
   },
   "packageManager": "pnpm@10.15.0",
   "dependencies": {

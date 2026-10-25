@@ -1,0 +1,108 @@
+{
+  "generatedAt": "2026-10-25T00:52:41.527Z",
+  "note": "Existing frontend → backend coupling recorded at T01. New entries fail the boundary check. Remove entries as modules move to neuron-back; an empty list is required by T16.",
+  "scanRoots": [
+    "app",
+    "components",
+    "hooks",
+    "lib",
+    "src/lib/api",
+    "src/lib/simulation",
+    "src/types",
+    "middleware.ts"
+  ],
+  "violations": [
+    {
+      "file": "app/(platform)/layout.tsx",
+      "specifier": "@/lib/auth/jwt"
+    },
+    {
+      "file": "app/error.tsx",
+      "specifier": "@/lib/logger"
+    },
+    {
+      "file": "hooks/useCitations.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useConcept.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useConcepts.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useDomains.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useEncyclopedia.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useEquations.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useExperiments.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useGlossary.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useReferences.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useRelationships.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useScientists.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useTaxonomy.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "hooks/useTimeline.ts",
+      "specifier": "@/validations/knowledge"
+    },
+    {
+      "file": "src/lib/simulation/assessment.ts",
+      "specifier": "@/config/env"
+    },
+    {
+      "file": "src/lib/simulation/history-params.ts",
+      "specifier": "mongoose"
+    },
+    {
+      "file": "src/lib/simulation/nl-interpreter.service.ts",
+      "specifier": "@/config/env"
+    },
+    {
+      "file": "src/lib/simulation/nl-interpreter.service.ts",
+      "specifier": "@/lib/ai/providers/provider.factory"
+    },
+    {
+      "file": "src/lib/simulation/nl-interpreter.service.ts",
+      "specifier": "@/lib/logger"
+    },
+    {
+      "file": "src/types/cognitive.ts",
+      "specifier": "mongoose"
+    },
+    {
+      "file": "src/types/index.ts",
+      "specifier": "mongoose"
+    },
+    {
+      "file": "src/types/knowledge.ts",
+      "specifier": "mongoose"
+    }
+  ]
+}

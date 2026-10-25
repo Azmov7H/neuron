@@ -57,6 +57,18 @@ The authenticated shell is defined in `app/(platform)/layout.tsx`, which resolve
 - Auth uses the `neuron_session` httpOnly cookie → `verifyAccessToken` → `payload.role`. Client `fetch` calls must use `credentials: "include"`.
 - Server route handlers wrap logic with `requireAuth` + `withErrorHandling`.
 - Responses follow the envelope from `ApiResponseHandler`: `{ success, data?, error?, message?, statusCode }`.
+- The typed client in `src/lib/api/client.ts` prefixes requests with `NEXT_PUBLIC_API_BASE_URL`. Leave it unset for same-origin legacy routes; point it at the Nest API during the split.
+
+## Backend import boundary
+
+Frontend code must not import backend modules or backend-only packages. The check records the existing coupling at T01 and fails on new violations:
+
+```bash
+pnpm check:boundaries
+pnpm check:boundaries:update   # after an approved temporary coupling
+```
+
+The legacy handlers under `app/api` are excluded. The baseline shrinks as modules move to `neuron-back` and must be empty by T16.
 
 ## Deployment
 

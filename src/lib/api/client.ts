@@ -21,6 +21,27 @@ export class ApiClientError extends Error {
 export type QueryValue = string | number | boolean | undefined | null;
 export type QueryParams = Record<string, unknown>;
 
+const ABSOLUTE_URL_PATTERN = /^https?:\/\//i;
+
+/**
+ * Resolves an API path against `NEXT_PUBLIC_API_BASE_URL`.
+ *
+ * Unset or empty keeps requests same-origin, which preserves the legacy behavior during the
+ * migration. In a split deployment the value points at the Nest API origin (optionally
+ * including the `/api/v1` prefix).
+ */
+export function resolveApiUrl(
+  path: string,
+  baseUrl: string | undefined = process.env.NEXT_PUBLIC_API_BASE_URL
+): string {
+  if (ABSOLUTE_URL_PATTERN.test(path)) return path;
+
+  const normalizedBase = baseUrl?.trim().replace(/\/+$/, '') ?? '';
+  if (!normalizedBase) return path;
+
+  return `${normalizedBase}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 export function buildQuery(params?: QueryParams): string {
   if (!params) return '';
   const sp = new URLSearchParams();
@@ -42,7 +63,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   let response: Response;
   try {
-    response = await fetch(path, { ...init, headers, credentials: 'include' });
+    response = await fetch(resolveApiUrl(path), { ...init, headers, credentials: 'include' });
   } catch (cause) {
     throw new ApiClientError(
       cause instanceof Error ? `Network error: ${cause.message}` : 'Network error',
